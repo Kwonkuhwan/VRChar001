@@ -52,7 +52,8 @@ MonoBehaviour:
     LookLeft: {fileID: 11400000, guid: 1daff2adbc211f345bb554a8d82be445, type: 2}
     LookRight: {fileID: 11400000, guid: 80a32a2c88bd76a4c8d40e13f9f7f8c9, type: 2}
     Neutral: {fileID: 11400000, guid: 424b9c1802bafba43a55514574820f2a, type: 2}
-    CustomClips: []
+    CustomClips:
+    - {fileID: 11400000, guid: e8895736d6d5362438356fcb999a7fe4, type: 2}
   LookAt:
     OffsetFromHead: {x: -0, y: 0.06, z: 0}
     LookAtType: 0

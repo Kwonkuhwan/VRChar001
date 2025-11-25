@@ -14,6 +14,9 @@ public class ExpressionController : MonoBehaviour
 
     private ExpressionKey _aaKey;
 
+    private ExpressionKey _testExpKey;
+
+
     void Awake()
     {
         _instance = GetComponent<Vrm10Instance>();
@@ -32,6 +35,8 @@ public class ExpressionController : MonoBehaviour
         _blink_R_Key = ExpressionKey.BlinkRight;
 
         _aaKey = ExpressionKey.Aa;
+
+        _testExpKey = ExpressionKey.CreateCustom("TestExp");
     }
 
     void Update()
@@ -49,6 +54,8 @@ public class ExpressionController : MonoBehaviour
         exp.SetWeight(_blink_L_Key, 0.0f);
         exp.SetWeight(_blink_R_Key, 0.0f);
         exp.SetWeight(_aaKey, 0.0f);
+
+        exp.SetWeight(_testExpKey, 0.0f);
 
 
         // 1키: 웃는 표정
@@ -89,8 +96,13 @@ public class ExpressionController : MonoBehaviour
 
         // A : 입 "아"
         if (Input.GetKey(KeyCode.A))
-        {
+        {            
             exp.SetWeight(_aaKey, 1.0f);
+        }
+
+        if (Input.GetKey(KeyCode.T))
+        {
+            exp.SetWeight(_testExpKey, 1.0f);
         }
     }
 }
