@@ -119,6 +119,55 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &197496607
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 197496609}
+  - component: {fileID: 197496608}
+  m_Layer: 0
+  m_Name: VMCReceiver
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &197496608
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 197496607}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8c21569d5b30d184592ce83ead2c0431, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  listenPort: 39539
+  blinkL: 0
+  blinkR: 0
+  mouthA: 0
+  joy: 0
+--- !u!4 &197496609
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 197496607}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.34185332, y: 0.8394308, z: -0.3435313}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -443,6 +492,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e819221a465b43942b2fd58fee12c74a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &1067070173
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1067070167}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f24b24ee4787044e9723c7b3a9a411f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  vmc: {fileID: 197496608}
 --- !u!1001 &2014564921
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -582,6 +644,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -1728013695380148634, guid: 9553b662974b9c44eb47f17b91ba0254, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1067070168}
+    - targetCorrespondingSourceObject: {fileID: -1728013695380148634, guid: 9553b662974b9c44eb47f17b91ba0254, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1067070173}
   m_SourcePrefab: {fileID: -3956505258223990651, guid: 9553b662974b9c44eb47f17b91ba0254, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
@@ -591,3 +656,4 @@ SceneRoots:
   - {fileID: 410087041}
   - {fileID: 832575519}
   - {fileID: 2014564921}
+  - {fileID: 197496609}
