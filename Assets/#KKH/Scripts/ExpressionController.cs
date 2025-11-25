@@ -8,6 +8,7 @@ public class ExpressionController : MonoBehaviour
     private ExpressionKey _happyKey;
     private ExpressionKey _angryKey;
     private ExpressionKey _sadKey;
+    private ExpressionKey _blinkKey;
     private ExpressionKey _blink_L_Key;
     private ExpressionKey _blink_R_Key;
 
@@ -26,6 +27,7 @@ public class ExpressionController : MonoBehaviour
         _happyKey = ExpressionKey.Happy;
         _angryKey = ExpressionKey.Angry;
         _sadKey = ExpressionKey.Sad;
+        _blinkKey = ExpressionKey.Blink;
         _blink_L_Key = ExpressionKey.BlinkLeft;
         _blink_R_Key = ExpressionKey.BlinkRight;
 
@@ -43,6 +45,7 @@ public class ExpressionController : MonoBehaviour
         exp.SetWeight(_happyKey, 0.0f);
         exp.SetWeight(_angryKey, 0.0f);
         exp.SetWeight(_sadKey, 0.0f);
+        exp.SetWeight(_blinkKey, 0.0f);
         exp.SetWeight(_blink_L_Key, 0.0f);
         exp.SetWeight(_blink_R_Key, 0.0f);
         exp.SetWeight(_aaKey, 0.0f);
@@ -69,7 +72,18 @@ public class ExpressionController : MonoBehaviour
         // 스페이스바 : 눈 깜빡임
         if (Input.GetKey(KeyCode.Space))
         {
+            exp.SetWeight(_blinkKey, 1.0f);
+        }
+
+        // 마우스 왼쪽 버튼 : 왼쪽 눈 깜빡임
+        if (Input.GetMouseButton(0))
+        {
             exp.SetWeight(_blink_L_Key, 1.0f);
+        }
+
+        // 마우스 오른쪽 버튼 : 오른쪽 눈 깜빡임
+        if (Input.GetMouseButton(1))
+        {
             exp.SetWeight(_blink_R_Key, 1.0f);
         }
 
