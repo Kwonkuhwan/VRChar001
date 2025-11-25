@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
+using UniGLTF;
 
 #if UNITY_2021_OR_NEWER
 #else
@@ -50,7 +51,7 @@ namespace UniVRM10
             {
                 return;
             }
-            var root = Selection.activeTransform.GetComponent<Vrm10Instance>();
+            var root = Selection.activeTransform.GetComponentOrNull<Vrm10Instance>();
             if (root == null)
             {
                 return;
@@ -89,11 +90,8 @@ namespace UniVRM10
                     foreach (var kv in runtime.GetWeights())
                     {
                         var key = kv.Key;
-                        if (kv.Key.Preset != ExpressionPreset.custom)
-                        {
-                            var value = ExpressionPresetSlider(expression, kv.Key.Preset, kv.Value);
-                            m_map[key] = value;
-                        }
+                        var value = ExpressionSlider(key, kv.Value);
+                        m_map[key] = value;
                     }
                     GUILayout.FlexibleSpace();
 
@@ -118,10 +116,10 @@ namespace UniVRM10
             }
         }
 
-        float ExpressionPresetSlider(VRM10ObjectExpression expression, ExpressionPreset preset, float value)
+        float ExpressionSlider(ExpressionKey key, float value)
         {
             EditorGUILayout.BeginHorizontal(Style);
-            EditorGUILayout.LabelField(preset.ToString());
+            EditorGUILayout.LabelField(key.ToString());
             value = EditorGUILayout.Slider(value, 0, 1.0f);
             EditorGUILayout.EndHorizontal();
             return value;

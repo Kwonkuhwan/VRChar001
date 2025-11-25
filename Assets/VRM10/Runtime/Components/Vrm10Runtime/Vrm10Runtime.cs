@@ -4,8 +4,6 @@ using System.Linq;
 using UniGLTF;
 using UniGLTF.Utils;
 using UnityEngine;
-using UniVRM10.FastSpringBones.Blittables;
-using UniVRM10.FastSpringBones.System;
 
 namespace UniVRM10
 {
@@ -21,13 +19,8 @@ namespace UniVRM10
     /// </summary>
     public class Vrm10Runtime : IDisposable
     {
-        private readonly Vrm10Instance m_target;
+        private readonly Vrm10Instance m_instance;
         private readonly Transform m_head;
-        private readonly FastSpringBoneService m_fastSpringBoneService;
-        private readonly IReadOnlyDictionary<Transform, TransformState> m_defaultTransformStates;
-
-        private FastSpringBoneBuffer m_fastSpringBoneBuffer;
-        private BlittableExternalData m_externalData;
 
         /// <summary>
         /// Control Rig may be null.
@@ -38,147 +31,73 @@ namespace UniVRM10
         public IVrm10Constraint[] Constraints { get; }
         public Vrm10RuntimeExpression Expression { get; }
         public Vrm10RuntimeLookAt LookAt { get; }
+        public IVrm10SpringBoneRuntime SpringBone { get; }
+        public IVrm10Animation VrmAnimation { get; set; }
 
+        [Obsolete("use Vrm10Runtime.SpringBone.SetModelLevel")]
         public Vector3 ExternalForce
         {
-            get => m_externalData.ExternalForce;
+            get
+            {
+                throw new NotImplementedException();
+                // return SpringBone.ExternalForce;
+            }
             set
             {
-                m_externalData.ExternalForce = value;
-                m_fastSpringBoneBuffer.ExternalData = m_externalData;
+                // SpringBone.SetModelLevel = value;
+                throw new NotImplementedException();
             }
         }
 
-        public Vrm10Runtime(Vrm10Instance target, bool useControlRig)
+        IReadOnlyDictionary<Transform, TransformState> _initPose;
+
+        public Vrm10Runtime(Vrm10Instance instance, bool useControlRig, IVrm10SpringBoneRuntime springBoneRuntime,
+            IReadOnlyDictionary<Transform, TransformState> initPose, bool isPrefabInstance)
         {
             if (!Application.isPlaying)
             {
-                Debug.LogWarning($"{nameof(Vrm10Runtime)} expects runtime behaviour.");
+                UniGLTFLogger.Warning($"{nameof(Vrm10Runtime)} expects runtime behaviour.");
             }
 
-            m_target = target;
+            _initPose = initPose;
+            m_instance = instance;
+            if (m_instance == null)
+            {
+                return;
+            }
 
-            if (!target.TryGetBoneTransform(HumanBodyBones.Head, out m_head))
+            if (!instance.TryGetBoneTransform(HumanBodyBones.Head, out m_head))
             {
                 throw new Exception();
             }
 
             if (useControlRig)
             {
-                ControlRig = new Vrm10RuntimeControlRig(target.Humanoid, m_target.transform);
+                ControlRig = new Vrm10RuntimeControlRig(instance.Humanoid, m_instance.transform);
             }
-            Constraints = target.GetComponentsInChildren<IVrm10Constraint>();
-            LookAt = new Vrm10RuntimeLookAt(target.Vrm.LookAt, target.Humanoid, ControlRig);
-            Expression = new Vrm10RuntimeExpression(target, LookAt, LookAt.EyeDirectionApplicable);
-
-            var instance = target.GetComponent<RuntimeGltfInstance>();
-            if (instance != null)
-            {
-                // ランタイムインポートならここに到達してゼロコストになる
-                m_defaultTransformStates = instance.InitialTransformStates;
-            }
-            else
-            {
-                // エディタでプレハブ配置してる奴ならこっちに到達して収集する
-                m_defaultTransformStates = target.GetComponentsInChildren<Transform>()
-                    .ToDictionary(tf => tf, tf => new TransformState(tf));
-            }
-
-            // NOTE: FastSpringBoneService は UnitTest などでは動作しない
-            if (Application.isPlaying)
-            {
-                m_fastSpringBoneService = FastSpringBoneService.Instance;
-                m_fastSpringBoneBuffer = CreateFastSpringBoneBuffer(m_target.SpringBone);
-                m_fastSpringBoneService.BufferCombiner.Register(m_fastSpringBoneBuffer);
-            }
+            Constraints = instance.GetComponentsInChildren<IVrm10Constraint>();
+            LookAt = new Vrm10RuntimeLookAt(instance, instance.Humanoid, ControlRig);
+            Expression = new Vrm10RuntimeExpression(instance, LookAt.EyeDirectionApplicable, isPrefabInstance);
+            SpringBone = springBoneRuntime;
         }
 
         public void Dispose()
         {
+            Expression.Dispose();
             ControlRig?.Dispose();
-            m_fastSpringBoneService.BufferCombiner.Unregister(m_fastSpringBoneBuffer);
-            m_fastSpringBoneBuffer.Dispose();
+            SpringBone.Dispose();
         }
 
-        /// <summary>
-        /// このVRMに紐づくSpringBone関連のバッファを再構築する
-        /// ランタイム実行時にSpringBoneに対して変更を行いたいときは、このメソッドを明示的に呼ぶ必要がある
-        /// </summary>
+        [Obsolete("use Vrm10Runtime.SpringBone.ReconstructSpringBone")]
         public void ReconstructSpringBone()
         {
-            m_fastSpringBoneService.BufferCombiner.Unregister(m_fastSpringBoneBuffer);
-
-            m_fastSpringBoneBuffer.Dispose();
-            m_fastSpringBoneBuffer = CreateFastSpringBoneBuffer(m_target.SpringBone);
-
-            m_fastSpringBoneService.BufferCombiner.Register(m_fastSpringBoneBuffer);
+            SpringBone.ReconstructSpringBone();
         }
-
-        private FastSpringBoneBuffer CreateFastSpringBoneBuffer(Vrm10InstanceSpringBone springBone)
-        {
-            return new FastSpringBoneBuffer(
-                springBone.Springs.Select(spring => new FastSpringBoneSpring
-                {
-                    center = spring.Center,
-                    colliders = spring.ColliderGroups
-                    .SelectMany(group => group.Colliders)
-                    .Select(collider => new FastSpringBoneCollider
-                    {
-                        Transform = collider.transform,
-                        Collider = new BlittableCollider
-                        {
-                            offset = collider.Offset,
-                            radius = collider.Radius,
-                            tail = collider.Tail,
-                            colliderType = TranslateColliderType(collider.ColliderType)
-                        }
-                    }).ToArray(),
-                    joints = spring.Joints
-                    .Select(joint => new FastSpringBoneJoint
-                    {
-                        Transform = joint.transform,
-                        Joint = new BlittableJoint
-                        {
-                            radius = joint.m_jointRadius,
-                            dragForce = joint.m_dragForce,
-                            gravityDir = joint.m_gravityDir,
-                            gravityPower = joint.m_gravityPower,
-                            stiffnessForce = joint.m_stiffnessForce
-                        },
-                        DefaultLocalRotation = GetOrAddDefaultTransformState(joint.transform).LocalRotation,
-                    }).ToArray(),
-                }).ToArray(),
-                m_externalData);
-        }
-
-        private TransformState GetOrAddDefaultTransformState(Transform tf)
-        {
-            if (m_defaultTransformStates.TryGetValue(tf, out var defaultTransformState))
-            {
-                return defaultTransformState;
-            }
-
-            Debug.LogWarning($"{tf.name} does not exist on load.");
-            return new TransformState(null);
-        }
-
-        private static BlittableColliderType TranslateColliderType(VRM10SpringBoneColliderTypes colliderType)
-        {
-            switch (colliderType)
-            {
-                case VRM10SpringBoneColliderTypes.Sphere:
-                    return BlittableColliderType.Sphere;
-                case VRM10SpringBoneColliderTypes.Capsule:
-                    return BlittableColliderType.Capsule;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
         /// <summary>
         /// 毎フレーム関連コンポーネントを解決する
         ///
-        /// * Contraint
+        /// * Update from VrmAnimation
+        /// * Constraint
         /// * Spring
         /// * LookAt
         /// * Expression
@@ -186,20 +105,58 @@ namespace UniVRM10
         /// </summary>
         public void Process()
         {
-            // 1. Control Rig
-            ControlRig?.Process();
-
-            // 2. Constraints
-            foreach (var constraint in Constraints)
+            // 1. Update From VrmAnimation
+            if (VrmAnimation != null)
             {
-                constraint.Process();
+                // copy pose
+                {
+                    Vrm10Retarget.Retarget(VrmAnimation.ControlRig, (ControlRig, ControlRig));
+                }
+
+                // update expressions
+                foreach (var (k, v) in VrmAnimation.ExpressionMap)
+                {
+                    Expression.SetWeight(k, v());
+                }
+
+                // look at
+                if (VrmAnimation.LookAt.HasValue)
+                {
+                    LookAt.LookAtInput = VrmAnimation.LookAt.Value;
+                }
             }
 
-            // 3. Gaze control
-            LookAt.Process(m_target.LookAtTargetType, m_target.LookAtTarget);
+            // 2. Control Rig
+            ControlRig?.Process();
 
-            // 4. Expression
-            Expression.Process();
+            // 3. Constraints
+            foreach (var constraint in Constraints)
+            {
+                if (constraint.ConstraintSource != null)
+                {
+                    constraint.Process(
+                        targetInitState: _initPose[constraint.ConstraintTarget],
+                        sourceInitState: _initPose[constraint.ConstraintSource]);
+                }
+            }
+
+            if (m_instance.LookAtTargetType == VRM10ObjectLookAt.LookAtTargetTypes.SpecifiedTransform
+            && m_instance.LookAtTarget != null)
+            {
+                // Transform 追跡で視線を生成する。
+                // 値を上書きします。
+                LookAt.LookAtInput = new LookAtInput { WorldPosition = m_instance.LookAtTarget.position };
+            }
+
+            // 4. Gaze control
+            var eyeDirection = LookAt.Process();
+
+            // 5. Apply Expression
+            // LookAt の角度制限などはこちらで処理されます。
+            Expression.Process(eyeDirection);
+
+            // 6. SpringBone
+            SpringBone.Process(Time.deltaTime);
         }
     }
 }

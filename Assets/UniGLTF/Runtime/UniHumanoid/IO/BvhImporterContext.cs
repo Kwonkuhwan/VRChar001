@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 using System.Text;
+using UniGLTF.Utils;
+
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -111,7 +113,8 @@ namespace UniHumanoid
             //
             // avatar
             //
-            Avatar = description.CreateAvatar(Root.transform);
+            ForceTransformUniqueName.Process(Root.transform);
+            Avatar = HumanoidLoader.BuildHumanAvatarFromMap(Root.transform, description.ToHumanoidMap(Root.transform));
             Avatar.name = "Avatar";
             AvatarDescription = description;
             var animator = Root.AddComponent<Animator>();
@@ -149,13 +152,13 @@ namespace UniHumanoid
                 // already exists
                 if (IsOwn(prefabPath))
                 {
-                    //Debug.LogFormat("already exist. own: {0}", prefabPath);
+                    //UniGLTFLogger.LogFormat("already exist. own: {0}", prefabPath);
                 }
                 else
                 {
                     // but unknown prefab
                     var unique = AssetDatabase.GenerateUniqueAssetPath(prefabPath);
-                    //Debug.LogFormat("already exist: {0} => {1}", prefabPath, unique);
+                    //UniGLTFLogger.LogFormat("already exist: {0} => {1}", prefabPath, unique);
                     prefabPath = unique;
                 }
             }
@@ -211,7 +214,7 @@ namespace UniHumanoid
             }
 
             // Create or update Main Asset
-            Debug.LogFormat("create prefab: {0}", path);
+            UniGLTF.UniGLTFLogger.Log($"create prefab: {path}");
             PrefabUtility.SaveAsPrefabAssetAndConnect(Root, path, InteractionMode.AutomatedAction);
 
             AssetDatabase.ImportAsset(path);

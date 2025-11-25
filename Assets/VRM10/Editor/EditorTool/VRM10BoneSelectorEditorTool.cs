@@ -70,7 +70,7 @@ namespace UniVRM10
                 _impl = new BoneSelector(SceneView.lastActiveSceneView.camera);
             }
 
-            var root = Selection.activeGameObject?.GetComponent<Vrm10Instance>();
+            var root = Selection.activeGameObject?.GetComponentOrNull<Vrm10Instance>();
             if (root == null)
             {
                 return;
@@ -88,7 +88,6 @@ namespace UniVRM10
             {
                 EditorGUI.BeginChangeCheck();
                 Quaternion rot = Handles.RotationHandle(selected.HeadObject.transform.rotation, selected.HeadObject.transform.position);
-                // Debug.Log($"{selected}");
                 if (EditorGUI.EndChangeCheck())
                 {
                     // UNDO

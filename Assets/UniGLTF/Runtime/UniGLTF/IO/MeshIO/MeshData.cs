@@ -12,16 +12,16 @@ namespace UniGLTF
     {
         private int _currentVertexCount = 0;
         private int _currentIndexCount = 0;
-        
+
         private NativeArray<int> _indices;
         private NativeArray<MeshVertex0> _vertices0;
         private NativeArray<MeshVertex1> _vertices1;
         private NativeArray<MeshVertex2> _vertices2;
-        
+
         private readonly List<SubMeshDescriptor> _subMeshes = new List<SubMeshDescriptor>();
-        private readonly List<int> _materialIndices = new List<int>();
+        private readonly List<int?> _materialIndices = new List<int?>();
         private readonly List<BlendShape> _blendShapes = new List<BlendShape>();
-        
+
         public NativeArray<MeshVertex0> Vertices0 => _vertices0.GetSubArray(0, _currentVertexCount);
         public NativeArray<MeshVertex1> Vertices1 => _vertices1.GetSubArray(0, _currentVertexCount);
         public NativeArray<MeshVertex2> Vertices2 => _vertices2.GetSubArray(0, _currentVertexCount);
@@ -29,7 +29,7 @@ namespace UniGLTF
         public NativeArray<int> Indices => _indices.GetSubArray(0, _currentIndexCount);
 
         public IReadOnlyList<SubMeshDescriptor> SubMeshes => _subMeshes;
-        public IReadOnlyList<int> MaterialIndices => _materialIndices;
+        public IReadOnlyList<int?> MaterialIndices => _materialIndices;
 
         public IReadOnlyList<BlendShape> BlendShapes => _blendShapes;
 
@@ -203,7 +203,10 @@ namespace UniGLTF
             return (vertexCount, indexCount);
         }
 
-        private BlendShape GetOrCreateBlendShape(int i)
+        private BlendShape GetOrCreateBlendShape(int i) =>
+            GetOrCreateBlendShape(i: i, numPositions: 0, numNormals: 0, numTangents: 0);
+
+        private BlendShape GetOrCreateBlendShape(int i, int numPositions, int numNormals, int numTangents)
         {
             if (i < _blendShapes.Count && _blendShapes[i] != null)
             {
@@ -215,7 +218,7 @@ namespace UniGLTF
                 _blendShapes.Add(null);
             }
 
-            var blendShape = new BlendShape(i.ToString());
+            var blendShape = new BlendShape(i.ToString(), numPositions, numNormals, numTangents);
             _blendShapes[i] = blendShape;
             return blendShape;
         }
@@ -227,7 +230,7 @@ namespace UniGLTF
             {
                 if (i >= targetNames.Count)
                 {
-                    Debug.LogWarning($"invalid primitive.extras.targetNames length");
+                    UniGLTFLogger.Warning($"invalid primitive.extras.targetNames length");
                     break;
                 }
 
@@ -267,7 +270,6 @@ namespace UniGLTF
             var count = maxIndex + 1;
             if (list.Count > count)
             {
-                // Debug.LogWarning($"remove {count} to {list.Count}");
                 list.RemoveRange(count, list.Count - count);
             }
         }
@@ -293,6 +295,79 @@ namespace UniGLTF
         private void ImportMeshIndependentVertexBuffer(GltfData data, glTFMesh gltfMesh, IAxisInverter inverter)
         {
             bool isOldVersion = data.GLTF.IsGeneratedUniGLTFAndOlder(1, 16);
+
+            {
+                // 事前に blendShape.{Positions,Normals,Tangents} のサイズを設定することで、GC Alloc を減少させる
+                int maxTargetsCount = 0;
+                Dictionary<int, int> numPositions = new();
+                Dictionary<int, int> numNormals   = new();
+                Dictionary<int, int> numTangents  = new();
+
+                foreach (var primitives in gltfMesh.primitives)
+                {
+                    if (primitives.targets != null && primitives.targets.Count > 0)
+                    {
+                        maxTargetsCount = Math.Max(maxTargetsCount, primitives.targets.Count);
+                        for (var i = 0; i < primitives.targets.Count; i++)
+                        {
+                            gltfMorphTarget primTarget = primitives.targets[i];
+                            glTF GLTF = data.GLTF;
+                            List<glTFAccessor> accessors = GLTF.accessors;
+                            if (primTarget.POSITION != -1)
+                            {
+                                numPositions.TryAdd(i, 0);
+                                numPositions[i] += GetAccessorElementCount(GLTF, accessors[primTarget.POSITION]);
+                            }
+                            if (primTarget.NORMAL != -1)
+                            {
+                                numNormals.TryAdd(i, 0);
+                                numNormals[i] += GetAccessorElementCount(GLTF, accessors[primTarget.NORMAL]);
+                            }
+                            if (primTarget.TANGENT != -1)
+                            {
+                                numTangents.TryAdd(i, 0);
+                                numTangents[i] += GetAccessorElementCount(GLTF, accessors[primTarget.TANGENT]);
+                            }
+                            continue;
+
+                            // GetTypedFromAccessor<T> 相当の、エレメント数のみを取得する関数
+                            static int GetTypedArrayElementCount(glTFAccessor accessor, glTFBufferView view)
+                            {
+                                if (view.byteStride == 0 || view.byteStride == accessor.GetStride())
+                                {
+                                    // planar layout
+                                    return accessor.CalcByteSize() / accessor.GetStride();
+                                }
+                                else
+                                {
+                                    // interleaved layout
+                                    return accessor.count;
+                                }
+                            }
+
+                            // GetArrayFromAccessor<T> 相当の、エレメント数のみを取得する関数
+                            static int GetAccessorElementCount(glTF GLTF, glTFAccessor accessor)
+                            {
+                                if (accessor.count <= 0) return 0;
+                                if (accessor.bufferView is null) return 0;
+                                return accessor.bufferView.HasValidIndex()
+                                    ? GetTypedArrayElementCount(accessor, GLTF.bufferViews[accessor.bufferView.Value])
+                                    : accessor.count;
+                            }
+                        }
+                    }
+                }
+                // 実際のサイズを確定
+                for (var i = 0; i < maxTargetsCount; i++)
+                {
+                    GetOrCreateBlendShape(
+                        i,
+                        numPositions.GetValueOrDefault(i, 0),
+                        numNormals.GetValueOrDefault(i, 0),
+                        numTangents.GetValueOrDefault(i, 0)
+                    );
+                }
+            }
 
             foreach (var primitives in gltfMesh.primitives)
             {
@@ -336,7 +411,7 @@ namespace UniGLTF
                     var texCoord1 = texCoords1 != null ? texCoords1.Value[i].ReverseUV() : Vector2.zero;
 
                     var color = colors != null ? colors.Value[i] : Color.white;
-                    
+
                     _vertices0[_currentVertexCount] = new MeshVertex0(
                         position,
                         normal
@@ -369,7 +444,7 @@ namespace UniGLTF
                                 throw new Exception("different length");
                             }
 
-                            blendShape.Positions.AddRange(array.Select(inverter.InvertVector3).ToArray());
+                            blendShape.Positions.AddRange(array.Select(inverter.InvertVector3));
                         }
 
                         if (primTarget.NORMAL != -1)
@@ -380,7 +455,7 @@ namespace UniGLTF
                                 throw new Exception("different length");
                             }
 
-                            blendShape.Normals.AddRange(array.Select(inverter.InvertVector3).ToArray());
+                            blendShape.Normals.AddRange(array.Select(inverter.InvertVector3));
                         }
 
                         if (primTarget.TANGENT != -1)
@@ -391,7 +466,7 @@ namespace UniGLTF
                                 throw new Exception("different length");
                             }
 
-                            blendShape.Tangents.AddRange(array.Select(inverter.InvertVector3).ToArray());
+                            blendShape.Tangents.AddRange(array.Select(inverter.InvertVector3));
                         }
                     }
                 }

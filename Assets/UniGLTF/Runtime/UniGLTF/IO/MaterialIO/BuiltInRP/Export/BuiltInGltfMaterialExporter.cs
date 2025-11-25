@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using VRMShaders;
 
 namespace UniGLTF
 {
@@ -40,7 +39,7 @@ namespace UniGLTF
                     break;
             }
 
-            Debug.Log($"Material `{m.name}` fallbacks.");
+            UniGLTFLogger.Log($"Material `{m.name}` fallbacks.");
             return BuiltInFallbackMaterialExporter.ExportMaterial(m, textureExporter);
         }
     }

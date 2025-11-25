@@ -4,22 +4,33 @@ using System.Linq;
 using UniGLTF;
 using UniGLTF.Extensions.VRMC_materials_mtoon;
 using UnityEngine;
-using VRMShaders;
-using VRMShaders.VRM10.MToon10.Runtime;
-using ColorSpace = VRMShaders.ColorSpace;
+using VRM10.MToon10;
+using ColorSpace = UniGLTF.ColorSpace;
 using OutlineWidthMode = UniGLTF.Extensions.VRMC_materials_mtoon.OutlineWidthMode;
 
 namespace UniVRM10
 {
     /// <summary>
-    /// Convert MToon parameters from glTF specification to Unity implementation.
+    /// A class that generates MaterialDescriptor for "VRM10/MToon10" shader based on vrm-1.0 Material specification.
+    ///
+    /// https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_materials_mtoon-1.0/README.md
     /// </summary>
-    public static class BuiltInVrm10MToonMaterialImporter
+    public class BuiltInVrm10MToonMaterialImporter
     {
+        /// <summary>
+        /// Can be replaced with custom shaders that are compatible with "VRM10/MToon10" properties and keywords.
+        /// </summary>
+        public Shader Shader { get; set; }
+
+        public BuiltInVrm10MToonMaterialImporter(Shader shader = null)
+        {
+            Shader = shader != null ? shader : Shader.Find("VRM10/MToon10");
+        }
+
         /// <summary>
         /// VMRC_materials_mtoon の場合にマテリアル生成情報を作成する
         /// </summary>
-        public static bool TryCreateParam(GltfData data, int i, out MaterialDescriptor matDesc)
+        public bool TryCreateParam(GltfData data, int i, out MaterialDescriptor matDesc)
         {
             var m = data.GLTF.materials[i];
             if (!UniGLTF.Extensions.VRMC_materials_mtoon.GltfDeserializer.TryGet(m.extensions,
@@ -37,7 +48,7 @@ namespace UniVRM10
                 null,
                 Vrm10MToonTextureImporter.EnumerateAllTextures(data, m, mtoon).ToDictionary(tuple => tuple.key, tuple => tuple.Item2.Item2),
                 TryGetAllFloats(m, mtoon).ToDictionary(tuple => tuple.key, tuple => tuple.value),
-                TryGetAllColors(m, mtoon).ToDictionary(tuple => tuple.key, tuple => tuple.value),
+                TryGetAllColors(data, m, mtoon).ToDictionary(tuple => tuple.key, tuple => tuple.value),
                 TryGetAllFloatArrays(m, mtoon).ToDictionary(tuple => tuple.key, tuple => tuple.value),
                 new Action<Material>[]
                 {
@@ -51,7 +62,7 @@ namespace UniVRM10
             return true;
         }
 
-        public static IEnumerable<(string key, Color value)> TryGetAllColors(glTFMaterial material, VRMC_materials_mtoon mToon)
+        public static IEnumerable<(string key, Color value)> TryGetAllColors(GltfData data, glTFMaterial material, VRMC_materials_mtoon mToon)
         {
             const ColorSpace gltfColorSpace = ColorSpace.Linear;
 
@@ -73,10 +84,13 @@ namespace UniVRM10
 
             // Emission
             // Emissive factor should be stored in Linear space
-            var emissionColor = material?.emissiveFactor?.ToColor3(gltfColorSpace, ColorSpace.Linear);
-            if (emissionColor.HasValue)
+            if (material != null)
             {
-                yield return (MToon10Prop.EmissiveFactor.ToUnityShaderLabName(), emissionColor.Value);
+                var emissionColor = GltfMaterialImportUtils.ImportLinearEmissiveFactor(data, material);
+                if (emissionColor.HasValue)
+                {
+                    yield return (MToon10Prop.EmissiveFactor.ToUnityShaderLabName(), emissionColor.Value);
+                }
             }
 
             // Matcap
@@ -245,6 +259,7 @@ namespace UniVRM10
         {
             switch (material?.alphaMode)
             {
+                case null:
                 case "OPAQUE":
                     return MToon10AlphaMode.Opaque;
                 case "MASK":
@@ -252,7 +267,7 @@ namespace UniVRM10
                 case "BLEND":
                     return MToon10AlphaMode.Transparent;
                 default:
-                    Debug.LogWarning($"Invalid AlphaMode");
+                    UniGLTFLogger.Warning($"Invalid AlphaMode");
                     return MToon10AlphaMode.Opaque;
             }
         }
@@ -292,7 +307,7 @@ namespace UniVRM10
                     return MToon10OutlineMode.Screen;
                 default:
                     // Invalid
-                    Debug.LogWarning("Invalid outlineWidthMode");
+                    UniGLTFLogger.Warning("Invalid outlineWidthMode");
                     return MToon10OutlineMode.None;
             }
         }

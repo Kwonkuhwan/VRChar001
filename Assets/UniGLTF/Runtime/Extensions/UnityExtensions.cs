@@ -66,6 +66,14 @@ namespace UniGLTF
             }
         }
 
+        public BlendShape(string name, int numPositions, int numNormals, int numTangents)
+        {
+            Name = name;
+            Positions = new List<Vector3>(numPositions);
+            Normals = new List<Vector3>(numNormals);
+            Tangents = new List<Vector3>(numTangents);
+        }
+
         public List<Vector3> Positions { get; private set; }
         public List<Vector3> Normals { get; private set; }
         public List<Vector3> Tangents { get; private set; }
@@ -399,14 +407,12 @@ namespace UniGLTF
 
         public static Mesh GetSharedMesh(this Transform t)
         {
-            var meshFilter = t.GetComponent<MeshFilter>();
-            if (meshFilter != null)
+            if (t.TryGetComponent<MeshFilter>(out var meshFilter))
             {
                 return meshFilter.sharedMesh;
             }
 
-            var skinnedMeshRenderer = t.GetComponent<SkinnedMeshRenderer>();
-            if (skinnedMeshRenderer != null)
+            if (t.TryGetComponent<SkinnedMeshRenderer>(out var skinnedMeshRenderer))
             {
                 return skinnedMeshRenderer.sharedMesh;
             }
@@ -414,30 +420,72 @@ namespace UniGLTF
             return null;
         }
 
-        public static Material[] GetSharedMaterials(this Transform t)
-        {
-            var renderer = t.GetComponent<Renderer>();
-            if (renderer != null)
-            {
-                return renderer.sharedMaterials;
-            }
-
-            return new Material[] { };
-        }
-
         public static bool Has<T>(this Transform transform, T t) where T : Component
         {
-            return transform.GetComponent<T>() == t;
+            if (transform.TryGetComponent<T>(out var c))
+            {
+                return c == t;
+            }
+            return false; ;
         }
 
         public static T GetOrAddComponent<T>(this GameObject go) where T : Component
         {
-            var c = go.GetComponent<T>();
-            if (c != null)
+            if (go.TryGetComponent<T>(out var t))
             {
-                return c;
+                return t;
             }
             return go.AddComponent<T>();
+        }
+
+        public static T GetComponentOrThrow<T>(this GameObject go) where T : Component
+        {
+            if (go.TryGetComponent<T>(out var t))
+            {
+                return t;
+            }
+            else
+            {
+                throw new ArgumentException($"no {typeof(T)}");
+            }
+        }
+
+        public static T GetComponentOrThrow<T>(this Component c) where T : Component
+        {
+            if (c.TryGetComponent<T>(out var t))
+            {
+                return t;
+            }
+            else
+            {
+                throw new ArgumentException($"no {typeof(T)}");
+            }
+        }
+
+        public static T GetComponentOrNull<T>(this GameObject go) where T : Component
+        {
+            if (go.TryGetComponent<T>(out var t))
+            {
+                return t;
+            }
+            else
+            {
+                // きれいな null を返す
+                return null;
+            }
+        }
+
+        public static T GetComponentOrNull<T>(this Component c) where T : Component
+        {
+            if (c.TryGetComponent<T>(out var t))
+            {
+                return t;
+            }
+            else
+            {
+                // きれいな null を返す
+                return null;
+            }
         }
 
         public static bool EnableForExport(this Component mono)
@@ -448,6 +496,41 @@ namespace UniGLTF
                 return false;
             }
             return true;
+        }
+
+        public enum PrefabType
+        {
+            PrefabAsset,
+            PrefabInstance,
+            NotPrefab,
+        }
+
+        /// <summary>
+        /// Scene と Prefab で挙動をスイッチする。
+        /// 
+        /// - Scene: ヒエラルキーを操作する。Asset の 書き出しはしない。UNDO はする。TODO: 明示的な Asset の書き出し。
+        /// - Prefab: 対象をコピーして処理する。Undo は実装しない。結果を Asset として書き出し、処理後にコピーは削除する。
+        /// 
+        /// </summary>
+        public static PrefabType GetPrefabType(this GameObject go)
+        {
+            if (go == null)
+            {
+                throw new ArgumentNullException();
+            }
+            if (!go.scene.IsValid())
+            {
+                return PrefabType.PrefabAsset;
+            }
+
+#if UNITY_EDITOR
+            if (PrefabUtility.GetOutermostPrefabInstanceRoot(go) != null)
+            {
+                return PrefabType.PrefabInstance;
+            }
+#endif
+
+            return PrefabType.NotPrefab;
         }
     }
 }

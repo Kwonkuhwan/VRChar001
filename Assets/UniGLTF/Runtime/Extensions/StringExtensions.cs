@@ -46,7 +46,7 @@ namespace UniGLTF
                 return path.Substring(UnityBasePath.Length + 1);
             }
 
-            //Debug.LogWarningFormat("{0} is starts with {1}", path, basePath);
+            //UniGLTFLogger.WarningFormat("{0} is starts with {1}", path, basePath);
             return path;
         }
 
@@ -70,6 +70,13 @@ namespace UniGLTF
             {
                 path = path.Replace(x, '+');
             }
+
+            if (path.StartsWith('.'))
+                path = '+' + path;
+
+            if (path == "")
+                path = "(empty)";
+
             return path;
         }
 

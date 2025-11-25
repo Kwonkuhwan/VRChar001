@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
-using VRMShaders;
 
 namespace UniGLTF
 {
@@ -57,26 +56,23 @@ namespace UniGLTF
             });
 
             Profiler.BeginSample("MeshUploader.BuildBlendShapeAsync");
-            if (blendShape.Positions.Count > 0)
+            if (positions.Length > 0)
             {
-                if (blendShape.Positions.Count == mesh.vertexCount)
+                if (positions.Length == mesh.vertexCount)
                 {
                     mesh.AddBlendShapeFrame(blendShape.Name, FrameWeight,
-                        blendShape.Positions.ToArray(),
+                        positions,
                         normals.Length == mesh.vertexCount && normals.Length == positions.Length ? normals : null,
                         null
                     );
                 }
                 else
                 {
-                    Debug.LogWarningFormat(
-                        "May be partial primitive has blendShape. Require separate mesh or extend blend shape, but not implemented: {0}",
-                        blendShape.Name);
+                    UniGLTFLogger.Warning($"May be partial primitive has blendShape. Require separate mesh or extend blend shape, but not implemented: {blendShape.Name}");
                 }
             }
             else
             {
-                // Debug.LogFormat("empty blendshape: {0}.{1}", mesh.name, blendShape.Name);
                 // add empty blend shape for keep blend shape index
                 mesh.AddBlendShapeFrame(blendShape.Name, FrameWeight,
                     emptyVertices,
@@ -91,10 +87,8 @@ namespace UniGLTF
         public static async Task<MeshWithMaterials> BuildMeshAndUploadAsync(
             IAwaitCaller awaitCaller,
             MeshData data,
-            Func<int, Material> materialFromIndex)
+            Func<int?, Task<Material>> materialFromIndex)
         {
-
-            //Debug.Log(prims.ToJson());
             var mesh = new Mesh
             {
                 name = data.Name
@@ -119,11 +113,17 @@ namespace UniGLTF
             mesh.RecalculateTangents();
             await awaitCaller.NextFrame();
 
+            var materials = new Material[data.MaterialIndices.Count];
+            for (var idx = 0; idx < data.MaterialIndices.Count; ++idx)
+            {
+                materials[idx] = await materialFromIndex(data.MaterialIndices[idx]);
+            }
+
             var result = new MeshWithMaterials
             {
                 Mesh = mesh,
-                Materials = data.MaterialIndices.Select(materialFromIndex).ToArray(),
-                ShouldSetRendererNodeAsBone  = data.ShouldSetRendererNodeAsBone,
+                Materials = materials,
+                ShouldSetRendererNodeAsBone = data.ShouldSetRendererNodeAsBone,
             };
             await awaitCaller.NextFrame();
 

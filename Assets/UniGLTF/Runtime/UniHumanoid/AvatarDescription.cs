@@ -5,6 +5,8 @@ using UnityEngine;
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using UniGLTF.Utils;
+using UniGLTF;
 
 
 namespace UniHumanoid
@@ -89,55 +91,24 @@ namespace UniHumanoid
         public bool hasTranslationDoF;
         public BoneLimit[] human;
 
-        public HumanDescription ToHumanDescription(Transform root)
+        public IEnumerable<(Transform, HumanBodyBones)> ToHumanoidMap(Transform root)
         {
-            var transforms = root.GetComponentsInChildren<Transform>();
-            var skeletonBones = new SkeletonBone[transforms.Length];
-            var index = 0;
-            foreach (var t in transforms)
+            var map = new Dictionary<string, Transform>();
+            foreach (var t in root.GetComponentsInChildren<Transform>())
             {
-                skeletonBones[index] = t.ToSkeletonBone();
-                index++;
+                map[t.name] = t;
             }
-
-            var humanBones = new HumanBone[human.Length];
-            index = 0;
-            foreach (var bonelimit in human)
-            {
-                humanBones[index] = bonelimit.ToHumanBone();
-                index++;
-            }
-
-
-            return new HumanDescription
-            {
-                skeleton = skeletonBones,
-                human = humanBones,
-                armStretch = armStretch,
-                legStretch = legStretch,
-                upperArmTwist = upperArmTwist,
-                lowerArmTwist = lowerArmTwist,
-                upperLegTwist = upperLegTwist,
-                lowerLegTwist = lowerLegTwist,
-                feetSpacing = feetSpacing,
-                hasTranslationDoF = hasTranslationDoF,
-            };
-        }
-
-        public Avatar CreateAvatar(Transform root)
-        {
-            // force unique name
-            ForceUniqueName.Process(root);
-            return AvatarBuilder.BuildHumanAvatar(root.gameObject, ToHumanDescription(root));
+            return human
+                .Where(x => !string.IsNullOrEmpty(x.boneName) && map.ContainsKey(x.boneName))
+                .Select(x => (map[x.boneName], x.humanBone));
         }
 
         public Avatar CreateAvatarAndSetup(Transform root)
         {
-            var avatar = CreateAvatar(root);
+            var avatar = HumanoidLoader.BuildHumanAvatarFromMap(root, ToHumanoidMap(root));
             avatar.name = name;
 
-            var animator = root.GetComponent<Animator>();
-            if (animator != null)
+            if (root.TryGetComponent<Animator>(out var animator))
             {
                 var positionMap = root.Traverse().ToDictionary(x => x, x => x.position);
                 animator.avatar = avatar;
@@ -147,8 +118,7 @@ namespace UniHumanoid
                 }
             }
 
-            var transfer = root.GetComponent<HumanPoseTransfer>();
-            if (transfer != null)
+            if (root.TryGetComponent<HumanPoseTransfer>(out var transfer))
             {
                 transfer.Avatar = avatar;
             }
@@ -253,17 +223,17 @@ namespace UniHumanoid
                 var importer = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(target));
                 if (importer != null)
                 {
-                    Debug.Log("AssetImporter Type: " + importer.GetType());
+                    UniGLTFLogger.Log("AssetImporter Type: " + importer.GetType());
                     ModelImporter modelImporter = importer as ModelImporter;
                     if (modelImporter != null)
                     {
                         des = modelImporter.humanDescription;
-                        Debug.Log("## Cool stuff data by ModelImporter ##");
+                        UniGLTFLogger.Log("## Cool stuff data by ModelImporter ##");
                         return true;
                     }
                     else
                     {
-                        Debug.LogWarning("## Please Select Imported Model in Project View not prefab or other things ##");
+                        UniGLTFLogger.Warning("## Please Select Imported Model in Project View not prefab or other things ##");
                     }
                 }
             }
@@ -271,5 +241,40 @@ namespace UniHumanoid
             return false;
         }
 #endif
+
+        public static Avatar CreateAvatarForCopyHierarchy(
+            Animator src,
+            GameObject dst,
+            IDictionary<Transform, Transform> boneMap,
+            Action<AvatarDescription> modAvatarDesc = null)
+        {
+            if (src == null)
+            {
+                throw new ArgumentNullException("src");
+            }
+
+            var srcHumanBones = CachedEnum.GetValues<HumanBodyBones>()
+                .Where(x => x != HumanBodyBones.LastBone)
+                .Select(x => new { Key = x, Value = src.GetBoneTransform(x) })
+                .Where(x => x.Value != null)
+                ;
+
+            var map =
+                   srcHumanBones
+                   .Where(x => boneMap.ContainsKey(x.Value))
+                   .ToDictionary(x => x.Key, x => boneMap[x.Value])
+                   ;
+
+            var avatarDescription = AvatarDescription.Create();
+            if (modAvatarDesc != null)
+            {
+                modAvatarDesc(avatarDescription);
+            }
+            ForceTransformUniqueName.Process(dst.transform);
+            avatarDescription.SetHumanBones(map);
+            var avatar = HumanoidLoader.BuildHumanAvatarFromMap(dst.transform, avatarDescription.ToHumanoidMap(dst.transform));
+            avatar.name = "created";
+            return avatar;
+        }
     }
 }

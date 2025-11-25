@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Threading.Tasks;
 using UnityEngine.Profiling;
-using VRMShaders;
 
 namespace UniGLTF
 {
@@ -13,12 +12,15 @@ namespace UniGLTF
     /// </summary>
     public class ImporterContext : IResponsibilityForDestroyObjects
     {
+        public readonly bool IsAssetImport;
+        private readonly ImporterContextSettings _settings;
+        
         public ITextureDescriptorGenerator TextureDescriptorGenerator { get; protected set; }
         public IMaterialDescriptorGenerator MaterialDescriptorGenerator { get; protected set; }
         public TextureFactory TextureFactory { get; }
         public MaterialFactory MaterialFactory { get; }
         public AnimationClipFactory AnimationClipFactory { get; }
-        public bool LoadAnimation { get; set; } = true;
+        private bool LoadAnimation => _settings.LoadAnimation;
 
         public IReadOnlyDictionary<SubAssetKey, UnityEngine.Object> ExternalObjectMap;
 
@@ -30,18 +32,23 @@ namespace UniGLTF
         /// <param name="externalObjectMap">外部オブジェクトのリスト(主にScriptedImporterのRemapで使う)</param>
         /// <param name="textureDeserializer">Textureロードをカスタマイズする</param>
         /// <param name="materialGenerator">Materialロードをカスタマイズする(URP向け)</param>
+        /// <param name="settings">ImporterContextの設定</param>
         public ImporterContext(
             GltfData data,
             IReadOnlyDictionary<SubAssetKey, UnityEngine.Object> externalObjectMap = null,
             ITextureDeserializer textureDeserializer = null,
-            IMaterialDescriptorGenerator materialGenerator = null)
+            IMaterialDescriptorGenerator materialGenerator = null,
+            ImporterContextSettings settings = null,
+            bool isAssetImport = false)
         {
+            IsAssetImport = isAssetImport;
+            _settings = settings ?? new ImporterContextSettings();
             Data = data;
             TextureDescriptorGenerator = new GltfTextureDescriptorGenerator(Data);
-            MaterialDescriptorGenerator = materialGenerator ?? new BuiltInGltfMaterialDescriptorGenerator();
+            MaterialDescriptorGenerator = materialGenerator ?? MaterialDescriptorGeneratorUtility.GetValidGltfMaterialDescriptorGenerator();
 
             ExternalObjectMap = externalObjectMap ?? new Dictionary<SubAssetKey, UnityEngine.Object>();
-            textureDeserializer = textureDeserializer ?? new UnityTextureDeserializer();
+            textureDeserializer = textureDeserializer ?? new UnityTextureDeserializer(_settings.ImportedTexturesAccessibility);
 
             TextureFactory = new TextureFactory(textureDeserializer, ExternalObjectMap
                 .Where(x => x.Value is Texture)
@@ -49,7 +56,8 @@ namespace UniGLTF
                 Data.MigrationFlags.IsRoughnessTextureValueSquared);
             MaterialFactory = new MaterialFactory(ExternalObjectMap
                 .Where(x => x.Value is Material)
-                .ToDictionary(x => x.Key, x => (Material)x.Value));
+                .ToDictionary(x => x.Key, x => (Material)x.Value),
+                MaterialDescriptorGenerator.GetGltfDefault());
             AnimationClipFactory = new AnimationClipFactory(ExternalObjectMap
                 .Where(x => x.Value is AnimationClip)
                 .ToDictionary(x => x.Key, x => (AnimationClip)x.Value));
@@ -66,7 +74,7 @@ namespace UniGLTF
         /// <summary>
         /// GLTF から Unity に変換するときに反転させる軸
         /// </summary>
-        public Axes InvertAxis = Axes.Z;
+        private Axes InvertAxis => _settings.InvertAxis;
 
         public static List<string> UnsupportedExtensions = new List<string>
         {
@@ -126,7 +134,12 @@ namespace UniGLTF
 
             await OnLoadHierarchy(awaitCaller, MeasureTime);
 
-            return RuntimeGltfInstance.AttachTo(Root, this);
+            var instance = RuntimeGltfInstance.AttachTo(Root, this);
+
+            // RuntimeGltfInstance を使う初期化(SpringBone)
+            await FinalizeAsync(awaitCaller);
+
+            return instance;
         }
 
         public virtual async Task LoadAnimationAsync(IAwaitCaller awaitCaller)
@@ -285,14 +298,7 @@ namespace UniGLTF
                 throw new ArgumentNullException();
             }
 
-            if (Data.GLTF.materials == null || Data.GLTF.materials.Count == 0)
-            {
-                // no material. work around.
-                // TODO: https://www.khronos.org/registry/glTF/specs/2.0/glTF-2.0.html#default-material
-                var param = MaterialDescriptorGenerator.GetGltfDefault();
-                await MaterialFactory.LoadAsync(param, TextureFactory.GetTextureAsync, awaitCaller);
-            }
-            else
+            if (Data.GLTF.materials != null)
             {
                 for (int i = 0; i < Data.GLTF.materials.Count; ++i)
                 {
@@ -309,11 +315,28 @@ namespace UniGLTF
             return Task.FromResult<object>(null);
         }
 
+        protected virtual Task FinalizeAsync(IAwaitCaller awaitCaller)
+        {
+            // do nothing
+            return Task.FromResult<object>(null);
+        }
+
         async Task<MeshWithMaterials> BuildMeshAsync(IAwaitCaller awaitCaller, Func<string, IDisposable> MeasureTime, MeshData meshData, int i)
         {
             using (MeasureTime("BuildMesh"))
             {
-                var meshWithMaterials = await MeshUploader.BuildMeshAndUploadAsync(awaitCaller, meshData, MaterialFactory.GetMaterial);
+                var meshWithMaterials = await MeshUploader.BuildMeshAndUploadAsync(awaitCaller, meshData,
+                    async materialIndex =>
+                    {
+                        if (materialIndex.HasValidIndex())
+                        {
+                            return MaterialFactory.GetMaterial(materialIndex.Value);
+                        }
+                        else
+                        {
+                            return await MaterialFactory.GetDefaultMaterialAsync(awaitCaller);
+                        }
+                    });
                 var mesh = meshWithMaterials.Mesh;
 
                 // mesh name
@@ -335,6 +358,17 @@ namespace UniGLTF
         #region Imported
         protected GameObject Root;
         public List<Transform> Nodes = new List<Transform>();
+        protected bool TryGetNode(int index, out Transform node)
+        {
+            if (index < 0 || index >= Nodes.Count)
+            {
+                UniGLTFLogger.Warning($"nodes[{index}] is not found !");
+                node = default;
+                return false;
+            }
+            node = Nodes[index];
+            return true;
+        }
 
         public List<MeshWithMaterials> Meshes = new List<MeshWithMaterials>();
         #endregion

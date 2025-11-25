@@ -3,7 +3,6 @@ using System.Linq;
 using NUnit.Framework;
 using UniGLTF;
 using UnityEngine;
-using VRMShaders;
 
 namespace UniVRM10
 {
@@ -24,7 +23,6 @@ namespace UniVRM10
             var migratedBytes = MigrationVrm.Migrate(File.ReadAllBytes(AliciaPath));
             using (var data = new GlbLowLevelParser(AliciaPath, migratedBytes).Parse())
             {
-
                 var matDesc = new BuiltInVrm10MaterialDescriptorGenerator().Get(data, 0);
                 Assert.AreEqual("Alicia_body", matDesc.Name);
                 Assert.AreEqual("VRM10/MToon10", matDesc.Shader.name);

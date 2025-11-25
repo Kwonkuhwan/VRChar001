@@ -17,13 +17,13 @@ namespace UniGLTF.MeshUtility
         {
             if (root == null)
             {
-                msg = MeshProcessingMessages.NO_GAMEOBJECT_SELECTED.Msg();
+                msg = MeshUtilityMessages.NO_GAMEOBJECT_SELECTED.Msg();
                 return false;
             }
 
             if (smr == null)
             {
-                msg = MeshProcessingMessages.SELECT_SKINNED_MESH.Msg();
+                msg = MeshUtilityMessages.SELECT_SKINNED_MESH.Msg();
                 return false;
             }
 
@@ -76,7 +76,7 @@ namespace UniGLTF.MeshUtility
                     ASSET_SUFFIX
                     );
             }
-            Debug.LogFormat("CreateAsset: {0}", assetPath);
+            UniGLTFLogger.Log($"CreateAsset: {assetPath}");
             AssetDatabase.CreateAsset(erased.sharedMesh, assetPath);
 
             // destroy BoneMeshEraser in the source

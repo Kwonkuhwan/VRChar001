@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Linq;
 using UniGLTF.Utils;
+using UniGLTF;
 
 namespace UniHumanoid
 {
@@ -21,8 +22,7 @@ namespace UniHumanoid
         {
             Bones = new GameObject[(int)HumanBodyBones.LastBone];
 
-            var animator = GetComponent<Animator>();
-            if (animator != null)
+            if (TryGetComponent<Animator>(out var animator))
             {
                 if (animator.avatar != null)
                 {
@@ -47,7 +47,7 @@ namespace UniHumanoid
             var hips = Bones[(int)HumanBodyBones.Hips];
             if (hips == null)
             {
-                Debug.LogWarning("require hips");
+                UniGLTFLogger.Warning("require hips");
                 return;
             }
 
@@ -94,7 +94,7 @@ namespace UniHumanoid
         private void Awake()
         {
             if (Bones == null
-                || Bones.All(x => x==null))
+                || Bones.All(x => x == null))
             {
                 GetBones();
             }

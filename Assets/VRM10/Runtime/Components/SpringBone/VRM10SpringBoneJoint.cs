@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using UniGLTF;
+using UniGLTF.SpringBoneJobs.Blittables;
 using UnityEngine;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
+
 
 namespace UniVRM10
 {
@@ -26,14 +26,42 @@ namespace UniVRM10
         [SerializeField]
         public float m_jointRadius = 0.02f;
 
+        [SerializeField]
+        public UniGLTF.SpringBoneJobs.AnglelimitTypes m_anglelimitType;
+
+        [SerializeField]
+        public Quaternion m_limitSpaceOffset = Quaternion.identity;
+
+        [SerializeField, Range(0, Mathf.PI)]
+        public float m_pitch = Mathf.PI;
+
+        [SerializeField, Range(0, Mathf.PI / 2)]
+        public float m_yaw = 0;
+
+        public BlittableJointMutable Blittable => new BlittableJointMutable(
+            stiffnessForce: m_stiffnessForce,
+            gravityPower: m_gravityPower,
+            gravityDir: m_gravityDir,
+            dragForce: m_dragForce,
+            radius: m_jointRadius,
+            // v0.129.4
+            angleLimitType: (float)m_anglelimitType,
+            angleLimit1: m_pitch,
+            angleLimit2: m_yaw,
+            angleLimitOffset: m_limitSpaceOffset
+            );
+
+        void OnValidate()
+        {
+            if (m_limitSpaceOffset == default)
+            {
+                m_limitSpaceOffset = Quaternion.identity;
+            }
+        }
+
         void AddJointRecursive(Transform t, VRM10SpringBoneJoint src)
         {
-            var joint = t.gameObject.GetComponent<VRM10SpringBoneJoint>();
-            if (joint == null)
-            {
-                joint = t.gameObject.AddComponent<VRM10SpringBoneJoint>();
-                Debug.Log($"{joint} added");
-            }
+            var joint = t.gameObject.GetOrAddComponent<VRM10SpringBoneJoint>();
 
             // copy settings
             joint.m_stiffnessForce = src.m_stiffnessForce;
@@ -51,8 +79,7 @@ namespace UniVRM10
 
         void GetJoints(Transform t, List<VRM10SpringBoneJoint> joints)
         {
-            var joint = t.GetComponent<VRM10SpringBoneJoint>();
-            if (joint != null)
+            if (t.TryGetComponent<VRM10SpringBoneJoint>(out var joint))
             {
                 joints.Add(joint);
             }
@@ -69,13 +96,13 @@ namespace UniVRM10
             var root = GetComponentInParent<Vrm10Instance>();
             if (root == null)
             {
-                Debug.LogWarning("not Vrm10Instance");
+                UniGLTFLogger.Warning("not Vrm10Instance");
                 return;
             }
 
             if (transform.childCount == 0)
             {
-                Debug.LogWarning("no children");
+                UniGLTFLogger.Warning("no children");
                 return;
             }
 
@@ -104,55 +131,35 @@ namespace UniVRM10
                 }
             }
 
-            Debug.LogWarning($"{this} is found in {root}");
-        }
-
-
-        (Vrm10InstanceSpringBone.Spring, int) FindTail(Vrm10Instance vrm, VRM10SpringBoneJoint head)
-        {
-            foreach (var spring in vrm.SpringBone.Springs)
-            {
-                var index = spring.Joints.IndexOf(head);
-                if (index != -1)
-                {
-                    if (index + 1 < spring.Joints.Count)
-                    {
-                        return (spring, index);
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-            return default;
+            UniGLTFLogger.Warning($"{this} is found in {root}");
         }
 
         private void OnDrawGizmosSelected()
         {
+            Matrix4x4 m = default;
+            m.SetTRS(transform.position, transform.rotation, Vector3.one);
+            Gizmos.matrix = m;
+
             var vrm = GetComponentInParent<Vrm10Instance>();
-            if (vrm == null)
+            if (vrm != null && vrm.TryGetRadiusAsTail(this, out var radius))
             {
-                return;
-            }
-
-            var (spring, joint_index) = FindTail(vrm, this);
-            if (spring == null)
-            {
-                return;
-            }
-
-            if (spring.Joints != null && joint_index + 1 < spring.Joints.Count)
-            {
-                var tail = spring.Joints[joint_index + 1];
-                if (tail != null)
+                if (radius.HasValue)
                 {
-                    // draw tail
                     Gizmos.color = Color.yellow;
-                    // tail の radius は head の m_jointRadius で決まる
-                    Gizmos.DrawWireSphere(tail.transform.position, m_jointRadius);
-                    Gizmos.DrawLine(transform.position, tail.transform.position);
+                    Gizmos.DrawWireSphere(Vector3.zero, radius.Value);
                 }
+                else
+                {
+                    // root
+                    Gizmos.color = new Color(1, 0.75f, 0f);
+                    Gizmos.DrawSphere(Vector3.zero, 0.01f);
+                }
+            }
+            else
+            {
+                // spring を構成しない
+                Gizmos.color = Color.red;
+                Gizmos.DrawSphere(Vector3.zero, m_jointRadius);
             }
         }
     }

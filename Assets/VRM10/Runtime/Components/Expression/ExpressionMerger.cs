@@ -1,8 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using VrmLib;
-
 
 namespace UniVRM10
 {
@@ -10,7 +9,7 @@ namespace UniVRM10
     /// <summary>
     /// ブレンドシェイプを蓄えてまとめて適用するクラス
     /// </summary>
-    internal sealed class ExpressionMerger
+    internal sealed class ExpressionMerger : IDisposable
     {
         /// <summary>
         /// Key から Expression を得る
@@ -26,14 +25,16 @@ namespace UniVRM10
         MaterialValueBindingMerger m_materialValueBindingMerger;
 
 
-        public ExpressionMerger(VRM10ObjectExpression expressions, Transform root)
+        public ExpressionMerger(VRM10ObjectExpression expressions, Transform root, bool isPrefabInstance)
         {
-            m_clipMap = expressions.Clips.ToDictionary(x => expressions.CreateKey(x.Clip), x => x.Clip);
-
-            m_valueMap = new Dictionary<ExpressionKey, float>();
-
+            m_clipMap = expressions.Clips.ToDictionary(
+                x => expressions.CreateKey(x.Clip),
+                x => x.Clip,
+                ExpressionKey.Comparer
+            );
+            m_valueMap = new Dictionary<ExpressionKey, float>(ExpressionKey.Comparer);
             m_morphTargetBindingMerger = new MorphTargetBindingMerger(m_clipMap, root);
-            m_materialValueBindingMerger = new MaterialValueBindingMerger(m_clipMap, root);
+            m_materialValueBindingMerger = new MaterialValueBindingMerger(m_clipMap, root, isPrefabInstance);
         }
 
         /// <summary>
@@ -42,7 +43,7 @@ namespace UniVRM10
         /// <param name="expressionWeights"></param>
         public void SetValues(Dictionary<ExpressionKey, float> expressionWeights)
         {
-            foreach (var (key, weight) in expressionWeights.Select(kv => (kv.Key, kv.Value)))
+            foreach (var (key, weight) in expressionWeights)
             {
                 AccumulateValue(key, weight);
             }
@@ -61,13 +62,18 @@ namespace UniVRM10
                 return;
             }
 
-            m_morphTargetBindingMerger.AccumulateValue(clip, value);
+            if (clip.IsBinary)
+            {
+                value = value > 0.5f ? 1 : 0;
+            }
+
+            m_morphTargetBindingMerger.AccumulateValue(key, value);
             m_materialValueBindingMerger.AccumulateValue(clip, value);
         }
 
-        public void RestoreMaterialInitialValues()
+        public void Dispose()
         {
-            m_materialValueBindingMerger.RestoreMaterialInitialValues();
+            m_materialValueBindingMerger.Dispose();
         }
     }
 }

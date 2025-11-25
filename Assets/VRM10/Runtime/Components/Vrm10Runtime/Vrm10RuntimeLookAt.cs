@@ -13,9 +13,17 @@ namespace UniVRM10
 
         internal ILookAtEyeDirectionApplicable EyeDirectionApplicable { get; }
 
-        public float Yaw { get; private set; }
-        public float Pitch { get; private set; }
+        /// <summary>
+        /// 入力値。適宜更新可。
+        /// </summary>
+        public LookAtInput LookAtInput { get; set; }
+
+        /// <summary>
+        /// 出力値。Process() のみが更新する
+        /// </summary>
         public LookAtEyeDirection EyeDirection { get; private set; }
+        public float Yaw => EyeDirection.Yaw;
+        public float Pitch => EyeDirection.Pitch;
 
         /// <summary>
         /// Transform that indicates the position center of eyes.
@@ -30,13 +38,16 @@ namespace UniVRM10
         /// </summary>
         public Transform LookAtOriginTransform { get; }
 
-        internal Vrm10RuntimeLookAt(VRM10ObjectLookAt lookAt, UniHumanoid.Humanoid humanoid, Vrm10RuntimeControlRig controlRig)
+        internal Vrm10RuntimeLookAt(Vrm10Instance instance, UniHumanoid.Humanoid humanoid, Vrm10RuntimeControlRig controlRig)
         {
-            _lookAt = lookAt;
+            _lookAt = instance.Vrm.LookAt;
+
             LookAtOriginTransform = InitializeLookAtOriginTransform(
-                humanoid.Head,
-                controlRig != null ? controlRig.GetBoneTransform(HumanBodyBones.Head) : humanoid.Head,
-                _lookAt.OffsetFromHead);
+                humanoid,
+                controlRig,
+                _lookAt.OffsetFromHead,
+                 instance.transform.rotation);
+
             _lookAtOriginTransformLocalPosition = LookAtOriginTransform.localPosition;
             _lookAtOriginTransformLocalRotation = LookAtOriginTransform.localRotation;
 
@@ -52,41 +63,37 @@ namespace UniVRM10
             }
         }
 
-        internal void Process(VRM10ObjectLookAt.LookAtTargetTypes lookAtTargetType, Transform lookAtTarget)
+        internal LookAtEyeDirection Process()
         {
             LookAtOriginTransform.localPosition = _lookAtOriginTransformLocalPosition;
             LookAtOriginTransform.localRotation = _lookAtOriginTransformLocalRotation;
 
-            switch (lookAtTargetType)
+            if (LookAtInput.YawPitch is LookAtEyeDirection dir)
             {
-                case VRM10ObjectLookAt.LookAtTargetTypes.SpecifiedTransform:
-                    // NOTE: 指定された Transform の位置を向くように Yaw/Pitch を計算して適用する
-                    if (lookAtTarget != null)
-                    {
-                        var value = CalculateYawPitchFromLookAtPosition(lookAtTarget.position);
-                        SetYawPitchManually(value.Yaw, value.Pitch);
-                    }
-                    break;
-                case VRM10ObjectLookAt.LookAtTargetTypes.YawPitchValue:
-                    // NOTE: 直接 Set された Yaw/Pitch を使って計算する
-                    break;
+                EyeDirection = dir;
             }
-
-            EyeDirection = new LookAtEyeDirection(Yaw, Pitch, 0, 0);
+            else if (LookAtInput.WorldPosition is Vector3 worldPosition)
+            {
+                // NOTE: 指定された Transform の位置を向くように Yaw/Pitch を計算して適用する
+                var (yaw, pitch) = CalculateYawPitchFromLookAtPosition(worldPosition);
+                EyeDirection = new LookAtEyeDirection(yaw, pitch);
+            }
+            return EyeDirection;
         }
 
         /// <summary>
         /// Yaw/Pitch 値を直接設定します。
-        /// LookAtTargetTypes が SpecifiedTransform の場合、ここで設定しても値は上書きされます。
+        /// Vrm10Instance.LookAtTargetTypes が SpecifiedTransform の場合、ここで設定しても値は上書きされます。
         /// </summary>
         /// <param name="yaw">Headボーンのforwardに対するyaw角(度)</param>
         /// <param name="pitch">Headボーンのforwardに対するpitch角(度)</param>
         public void SetYawPitchManually(float yaw, float pitch)
         {
-            Yaw = yaw;
-            Pitch = pitch;
+            LookAtInput = new LookAtInput { YawPitch = new LookAtEyeDirection(yaw, pitch) };
         }
 
+        /// <param name="lookAtWorldPosition"></param>
+        /// <returns>Degree</returns>
         public (float Yaw, float Pitch) CalculateYawPitchFromLookAtPosition(Vector3 lookAtWorldPosition)
         {
             var localPosition = LookAtOriginTransform.worldToLocalMatrix.MultiplyPoint(lookAtWorldPosition);
@@ -94,18 +101,40 @@ namespace UniVRM10
             return (yaw, pitch);
         }
 
-        private static Transform InitializeLookAtOriginTransform(Transform rawHead, Transform actualHead, Vector3 eyeOffsetValue)
+        /// <summary>
+        /// Generate empty object for gaze calculation.
+        /// NOTE: このメソッドを実行するとき、モデル全体は初期姿勢（T-Pose）でなければならない。
+        /// NOTE: Vrm10Instance.Runtime 呼び出しによりトリガーされる。
+        /// From v0.127.0: VRM Root（ Vrm10Instance が Add されている）GameObject は初期姿勢でなくてもよい #2445
+        /// </summary>
+        /// <param name="humanoid"></param>
+        /// <param name="controlRig">if provided parent is controlrig head else humanoid head</param>
+        /// <param name="eyeOffsetValue">A humanoid head local offset</param>
+        /// <param name="rootRotation">world rotation of vrm model</param>
+        /// <returns></returns>
+        private static Transform InitializeLookAtOriginTransform(UniHumanoid.Humanoid humanoid, Vrm10RuntimeControlRig controlRig,
+            Vector3 eyeOffsetValue, Quaternion rootRotation)
         {
-            // NOTE: このメソッドを実行するとき、モデル全体は初期姿勢（T-Pose）でなければならない。
             var lookAtOrigin = new GameObject("_look_at_origin_").transform;
-            lookAtOrigin.SetParent(actualHead);
-            lookAtOrigin.position = rawHead.TransformPoint(eyeOffsetValue);
-            lookAtOrigin.rotation = Quaternion.identity;
+            if (controlRig != null)
+            {
+                // controlRig のHeadに連結
+                lookAtOrigin.SetParent(controlRig.GetBoneTransform(HumanBodyBones.Head));
+            }
+            else
+            {
+                // humanoid のHeadに連結
+                lookAtOrigin.SetParent(humanoid.Head);
+            }
+
+            lookAtOrigin.position = humanoid.Head.TransformPoint(eyeOffsetValue);
+            // v0.127.0
+            lookAtOrigin.rotation = rootRotation;
 
             return lookAtOrigin;
         }
 
-#region Obsolete
+        #region Obsolete
         [Obsolete("Use " + nameof(LookAtOriginTransform))]
         public Transform GetLookAtOrigin(Transform head)
         {
@@ -134,6 +163,6 @@ namespace UniVRM10
                     throw new ArgumentOutOfRangeException(nameof(lookAtTargetType), lookAtTargetType, null);
             }
         }
-#endregion
+        #endregion
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using UniGLTF;
 using UniJSON;
 using UnityEngine;
 
@@ -78,7 +79,7 @@ namespace UniVRM10
                 if (nodeIndex == -1)
                 {
                     // invalid data. skip
-                    Debug.LogWarning($"[MigrationVrmExpression] node.mesh == {meshIndex} not found");
+                    UniGLTFLogger.Warning($"[MigrationVrmExpression] node.mesh == {meshIndex} not found");
                     continue;
                 }
                 bind.Node = nodeIndex;
@@ -140,14 +141,14 @@ namespace UniVRM10
                 if (material == null)
                 {
                     // invalid data. skip
-                    Debug.LogWarning($"[MigrationVrmExpression] material.name == {materialName} is not found");
+                    UniGLTFLogger.Warning($"[MigrationVrmExpression] material.name == {materialName} is not found");
                     continue;
                 }
                 var materialIndex = gltf.materials.IndexOf(material);
                 if (materialIndex == -1)
                 {
                     // invalid data. skip
-                    Debug.LogWarning($"[MigrationVrmExpression] material.name == {materialName} index");
+                    UniGLTFLogger.Warning($"[MigrationVrmExpression] material.name == {materialName} index");
                     continue;
                 }
                 var propertyName = x["propertyName"].GetString();
@@ -239,8 +240,10 @@ namespace UniVRM10
                     MaterialColorBinds = new List<UniGLTF.Extensions.VRMC_vrm.MaterialColorBind>(),
                     TextureTransformBinds = new List<UniGLTF.Extensions.VRMC_vrm.TextureTransformBind>(),
                 };
-                expression.MorphTargetBinds = ToMorphTargetBinds(blendShapeClip["binds"], meshToNode).ToList();
-
+                if (blendShapeClip.TryGet("binds", out JsonNode binds))
+                {
+                    expression.MorphTargetBinds = ToMorphTargetBinds(binds, meshToNode).ToList();
+                }
                 if (blendShapeClip.TryGet("materialValues", out JsonNode materialValues))
                 {
                     ToMaterialColorBinds(gltf, materialValues, expression);

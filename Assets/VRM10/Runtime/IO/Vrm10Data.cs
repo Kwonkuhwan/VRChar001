@@ -1,10 +1,8 @@
 using System;
-using System.IO;
 using System.Linq;
 using UniGLTF;
 using UniGLTF.Extensions.VRMC_vrm;
 using UniJSON;
-using UnityEngine;
 
 namespace UniVRM10
 {
@@ -17,6 +15,9 @@ namespace UniVRM10
         {
             Data = data;
             VrmExtension = vrm;
+
+            // ヒューマノイド向け
+            ForceGltfNodeUniqueName.Process(Data.GLTF.nodes);
         }
 
         /// <summary>
@@ -92,7 +93,7 @@ namespace UniVRM10
             }
 
             byte[] debugCopy = null;
-            if (VRMShaders.Symbols.VRM_DEVELOP)
+            if (Symbols.VRM_DEVELOP)
             {
                 // load 時の右手左手座標変換でバッファが破壊的変更されるので、コピーを作っている
                 debugCopy = migrated.Select(x => x).ToArray();
@@ -100,6 +101,7 @@ namespace UniVRM10
 
             // マイグレーション結果をパースする
             var migratedData = new GlbLowLevelParser(data.TargetPath, migrated).Parse();
+            migratedData.ExtensionSupportFlags.CopyValueFrom(data.ExtensionSupportFlags);
             try
             {
                 if (!UniGLTF.Extensions.VRMC_vrm.GltfDeserializer.TryGet(migratedData.GLTF.extensions, out VRMC_vrm vrm))
@@ -121,7 +123,7 @@ namespace UniVRM10
             }
             catch (Exception ex)
             {
-                Debug.LogWarning(ex);
+                UniGLTFLogger.Warning($"{ex}");
                 vrm1Data = default;
                 migration = new MigrationData(ex.Message);
                 // 破棄

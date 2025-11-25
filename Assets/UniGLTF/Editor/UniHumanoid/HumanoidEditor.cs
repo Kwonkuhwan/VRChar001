@@ -5,6 +5,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 using System;
+using UniGLTF;
 
 namespace UniHumanoid
 {
@@ -394,13 +395,12 @@ namespace UniHumanoid
                     if (avatar != null)
                     {
                         avatar.name = "avatar";
-                        Debug.LogFormat("Create avatar {0}", unityPath);
+                        UniGLTF.UniGLTFLogger.Log($"Create avatar {unityPath}");
                         AssetDatabase.CreateAsset(avatar, unityPath);
                         AssetDatabase.ImportAsset(unityPath);
 
                         // replace
-                        var animator = m_target.GetComponent<Animator>();
-                        if (animator == null)
+                        if (m_target.TryGetComponent<Animator>(out var animator))
                         {
                             animator = m_target.gameObject.AddComponent<Animator>();
                         }
@@ -411,7 +411,7 @@ namespace UniHumanoid
                 }
                 else
                 {
-                    Debug.LogWarning($"cannot create {path}");
+                    UniGLTFLogger.Warning($"cannot create {path}");
                 }
             }
         }

@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
-using VrmLib;
 
 namespace UniVRM10
 {
@@ -143,7 +141,7 @@ namespace UniVRM10
 
         public void Replace(IDictionary<VRM10Expression, VRM10Expression> map)
         {
-            foreach (var (k, v) in map.Select(kv => (kv.Key, kv.Value)))
+            foreach (var (k, v) in map)
             {
                 Replace(k, v);
             }

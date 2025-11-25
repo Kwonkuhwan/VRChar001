@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using UniGLTF;
+using UniGLTF.Utils;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -16,6 +19,7 @@ namespace UniVRM10
     [AddComponentMenu("VRM10/VRMInstance")]
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(11000)]
+    [RequireComponent(typeof(UniHumanoid.Humanoid))]
     public class Vrm10Instance : MonoBehaviour
     {
         /// <summary>
@@ -64,11 +68,36 @@ namespace UniVRM10
 
         private UniHumanoid.Humanoid m_humanoid;
         private Vrm10Runtime m_runtime;
+        // 中継用。InitializeAtRuntime でもらって MakeRuntime で使う
+        private IVrm10SpringBoneRuntime m_springBoneRuntime;
+        private IReadOnlyDictionary<Transform, TransformState> m_defaultTransformStates;
 
         /// <summary>
         /// ControlRig の生成オプション
         /// </summary>
         private bool m_useControlRig;
+
+        public IReadOnlyDictionary<Transform, TransformState> DefaultTransformStates
+        {
+            get
+            {
+                if (m_defaultTransformStates == null)
+                {
+                    if (TryGetComponent<RuntimeGltfInstance>(out var gltfInstance))
+                    {
+                        // ランタイムインポートならここに到達してゼロコストになる
+                        m_defaultTransformStates = gltfInstance.InitialTransformStates;
+                    }
+                    else
+                    {
+                        // エディタでプレハブ配置してる奴ならこっちに到達して収集する
+                        m_defaultTransformStates = GetComponentsInChildren<Transform>()
+                            .ToDictionary(tf => tf, tf => new TransformState(tf));
+                    }
+                }
+                return m_defaultTransformStates;
+            }
+        }
 
         /// <summary>
         /// VRM ファイルに記録された Humanoid ボーンに対応します。
@@ -80,37 +109,92 @@ namespace UniVRM10
             {
                 if (m_humanoid == null)
                 {
-                    m_humanoid = GetComponent<UniHumanoid.Humanoid>();
+                    m_humanoid = this.GetComponentOrNull<UniHumanoid.Humanoid>();
                 }
                 return m_humanoid;
             }
         }
 
-        /// <summary>
-        /// ランタイム情報
-        /// </summary>
+        internal Vrm10Runtime MakeRuntime(bool useControlRig)
+        {
+            if (m_springBoneRuntime == null)
+            {
+                // springbone が無い => シーン配置モデルが play されたと見做す
+                var provider = GetComponent<IVrm10SpringBoneRuntimeProvider>();
+                if (provider != null)
+                {
+                    // 明示的カスタマイズ
+                    m_springBoneRuntime = provider.CreateSpringBoneRuntime();
+                }
+
+                if (m_springBoneRuntime == null)
+                {
+                    // シーン配置 play のデフォルトは singletone ではない方
+                    m_springBoneRuntime = new Vrm10FastSpringboneRuntimeStandalone();
+                }
+
+                m_springBoneRuntime.InitializeAsync(this, new ImmediateCaller());
+            }
+            else
+            {
+                // importer 内で InitializeAsync が呼び出し済み
+            }
+
+            var initPose = RuntimeGltfInstance.SafeGetInitialPose(transform);
+            
+            // NOTE: RuntimeGltfInstanceがないかどうかでPrefabのインスタンスであるか（EditorImportされているか）が判別できる
+            var isPrefabInstance = !GetComponent<RuntimeGltfInstance>();
+
+            return new Vrm10Runtime(this, useControlRig, m_springBoneRuntime, initPose, isPrefabInstance);
+        }
+
         public Vrm10Runtime Runtime
         {
             get
             {
                 if (m_runtime == null)
                 {
-                    m_runtime = new Vrm10Runtime(this, m_useControlRig);
+                    if (this == null) throw new MissingReferenceException("instance was destroyed");
+                    m_runtime = MakeRuntime(m_useControlRig);
                 }
                 return m_runtime;
             }
         }
 
-        internal void InitializeAtRuntime(bool useControlRig)
+        internal void InitializeAtRuntime(
+            bool useControlRig,
+            IVrm10SpringBoneRuntime springBoneRuntime,
+            IReadOnlyDictionary<Transform, TransformState> defaultTransformStates = null
+            )
         {
             m_useControlRig = useControlRig;
+            m_springBoneRuntime = springBoneRuntime;
+
+            if (defaultTransformStates != null)
+            {
+                m_defaultTransformStates = defaultTransformStates;
+            }
+            else
+            {
+                if (TryGetComponent<RuntimeGltfInstance>(out var gltfInstance))
+                {
+                    // ランタイムインポートならここに到達してゼロコストになる
+                    defaultTransformStates = gltfInstance.InitialTransformStates;
+                }
+                else
+                {
+                    // エディタでプレハブ配置してる奴ならこっちに到達して収集する
+                    defaultTransformStates = GetComponentsInChildren<Transform>()
+                        .ToDictionary(tf => tf, tf => new TransformState(tf));
+                }
+            }
         }
 
         void Start()
         {
             if (Vrm == null)
             {
-                Debug.LogError("no VRM10Object");
+                UniGLTFLogger.Error("no VRM10Object");
                 enabled = false;
                 return;
             }
@@ -138,30 +222,44 @@ namespace UniVRM10
 
         private void OnDestroy()
         {
-            Runtime.Dispose();
+            DisposeRuntime();
         }
 
-        private void OnDrawGizmosSelected()
+        public void DisposeRuntime()
         {
-            Gizmos.color = Color.green;
-            foreach (var spring in SpringBone.Springs)
+            if (m_runtime != null)
             {
-                foreach (var (head, tail) in spring.EnumHeadTail())
-                {
-                    Gizmos.DrawLine(head.transform.position, tail.transform.position);
-                    Gizmos.DrawWireSphere(tail.transform.position, head.m_jointRadius);
-                }
+                m_runtime.Dispose();
+                m_runtime = null;
             }
         }
 
         public bool TryGetBoneTransform(HumanBodyBones bone, out Transform t)
         {
+            if (Humanoid == null)
+            {
+                t = null;
+                return false;
+            }
             t = Humanoid.GetBoneTransform(bone);
             if (t == null)
             {
                 return false;
             }
             return true;
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            foreach (var spring in SpringBone.Springs)
+            {
+                spring.DrawGizmos();
+            }
+
+            if (Application.isPlaying)
+            {
+                Runtime.SpringBone.DrawGizmos();
+            }
         }
 
         #region Obsolete
@@ -174,5 +272,33 @@ namespace UniVRM10
         }
 
         #endregion
+
+        public bool TryGetRadiusAsTail(VRM10SpringBoneJoint target, out float? radius)
+        {
+            foreach (var spring in SpringBone.Springs)
+            {
+                VRM10SpringBoneJoint prev = default;
+                foreach (var joint in spring.Joints)
+                {
+                    if (joint == target)
+                    {
+                        if (prev != null)
+                        {
+                            radius = prev.m_jointRadius;
+                            return true;
+                        }
+                        else
+                        {
+                            radius = default;
+                            return true;
+                        }
+                    }
+                    prev = joint;
+                }
+            }
+
+            radius = default;
+            return false;
+        }
     }
 }

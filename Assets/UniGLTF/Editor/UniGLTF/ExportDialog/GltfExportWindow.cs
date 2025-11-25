@@ -1,15 +1,19 @@
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using VRMShaders;
 
 namespace UniGLTF
 {
     public class GltfExportWindow : ExportDialogBase
     {
-
+        public const string MENU_NAME = "Export glTF...";
+        public static void ExportGameObjectToGltfFile()
+        {
+            var window = (GltfExportWindow)GltfExportWindow.GetWindow(typeof(GltfExportWindow));
+            window.titleContent = new GUIContent(MENU_NAME);
+            window.Show();
+        }
 
         enum Tabs
         {
@@ -105,11 +109,12 @@ namespace UniGLTF
             {
                 var data = new ExportingGltfData();
                 using (var exporter = new gltfExporter(data, Settings,
-                    progress: new EditorProgress(),
-                    animationExporter: new EditorAnimationExporter()))
+                   progress: new EditorProgress(),
+                   animationExporter: new EditorAnimationExporter(),
+                   textureSerializer: new EditorTextureSerializer()))
                 {
                     exporter.Prepare(State.ExportRoot);
-                    exporter.Export(new EditorTextureSerializer());
+                    exporter.Export();
                 }
 
                 if (isGlb)

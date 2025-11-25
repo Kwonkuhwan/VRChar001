@@ -2,40 +2,36 @@
 using System.Collections.Generic;
 using UniGLTF;
 using UnityEngine;
-using VRMShaders;
 
 namespace UniVRM10
 {
+    /// <summary>
+    /// A class that generates MaterialDescriptor by considering the VRM 1.0 extension included in the glTF data to be imported.
+    /// </summary>
     public sealed class BuiltInVrm10MaterialDescriptorGenerator : IMaterialDescriptorGenerator
     {
+        public BuiltInGltfPbrMaterialImporter PbrMaterialImporter { get; } = new();
+        public BuiltInGltfDefaultMaterialImporter DefaultMaterialImporter { get; } = new();
+        public BuiltInGltfUnlitMaterialImporter UnlitMaterialImporter { get; } = new();
+        public BuiltInVrm10MToonMaterialImporter MToonMaterialImporter { get; } = new();
+
         public MaterialDescriptor Get(GltfData data, int i)
         {
             // mtoon
-            if (BuiltInVrm10MToonMaterialImporter.TryCreateParam(data, i, out MaterialDescriptor matDesc)) return matDesc;
+            if (MToonMaterialImporter.TryCreateParam(data, i, out MaterialDescriptor matDesc)) return matDesc;
             // unlit
-            if (BuiltInGltfUnlitMaterialImporter.TryCreateParam(data, i, out matDesc)) return matDesc;
+            if (UnlitMaterialImporter.TryCreateParam(data, i, out matDesc)) return matDesc;
             // pbr
-            if (BuiltInGltfPbrMaterialImporter.TryCreateParam(data, i, out matDesc)) return matDesc;
+            if (PbrMaterialImporter.TryCreateParam(data, i, out matDesc)) return matDesc;
 
             // fallback
             if (Symbols.VRM_DEVELOP)
             {
-                Debug.LogWarning($"material: {i} out of range. fallback");
+                UniGLTFLogger.Warning($"material: {i} out of range. fallback");
             }
-            return new MaterialDescriptor(
-                GltfMaterialImportUtils.ImportMaterialName(i, null),
-                BuiltInGltfPbrMaterialImporter.Shader,
-                null, 
-                new Dictionary<string, TextureDescriptor>(),
-                new Dictionary<string, float>(),
-                new Dictionary<string, Color>(),
-                new Dictionary<string, Vector4>(),
-                new Action<Material>[]{});
+            return GetGltfDefault(GltfMaterialImportUtils.ImportMaterialName(i, null));
         }
 
-        public MaterialDescriptor GetGltfDefault()
-        {
-            return BuiltInGltfDefaultMaterialImporter.CreateParam();
-        }
+        public MaterialDescriptor GetGltfDefault(string materialName = null) => DefaultMaterialImporter.CreateParam(materialName);
     }
 }

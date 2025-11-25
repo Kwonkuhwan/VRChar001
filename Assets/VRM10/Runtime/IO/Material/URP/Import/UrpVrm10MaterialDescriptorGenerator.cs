@@ -2,35 +2,36 @@
 using System.Collections.Generic;
 using UniGLTF;
 using UnityEngine;
-using VRMShaders;
 
 namespace UniVRM10
 {
+    /// <summary>
+    /// A class that generates MaterialDescriptor by considering the VRM 1.0 extension included in the glTF data to be imported.
+    /// </summary>
     public sealed class UrpVrm10MaterialDescriptorGenerator : IMaterialDescriptorGenerator
     {
+        public UrpGltfPbrMaterialImporter PbrMaterialImporter { get; } = new();
+        public UrpGltfDefaultMaterialImporter DefaultMaterialImporter { get; } = new();
+        public BuiltInGltfUnlitMaterialImporter UnlitMaterialImporter { get; } = new();
+        public UrpVrm10MToonMaterialImporter MToonMaterialImporter { get; } = new();
+
         public MaterialDescriptor Get(GltfData data, int i)
         {
+            // mtoon
+            if (MToonMaterialImporter.TryCreateParam(data, i, out var matDesc)) return matDesc;
             // unlit
-            if (BuiltInGltfUnlitMaterialImporter.TryCreateParam(data, i, out MaterialDescriptor matDesc)) return matDesc;
+            if (UnlitMaterialImporter.TryCreateParam(data, i, out matDesc)) return matDesc;
             // pbr
-            if (UrpGltfPbrMaterialImporter.TryCreateParam(data, i, out matDesc)) return matDesc;
+            if (PbrMaterialImporter.TryCreateParam(data, i, out matDesc)) return matDesc;
 
-            // fallback
-            Debug.LogWarning($"material: {i} out of range. fallback");
-            return new MaterialDescriptor(
-                GltfMaterialImportUtils.ImportMaterialName(i, null),
-                UrpGltfPbrMaterialImporter.Shader,
-                null,
-                new Dictionary<string, TextureDescriptor>(),
-                new Dictionary<string, float>(),
-                new Dictionary<string, Color>(),
-                new Dictionary<string, Vector4>(),
-                new Action<Material>[]{});
+            // NOTE: Fallback to default material
+            if (Symbols.VRM_DEVELOP)
+            {
+                UniGLTFLogger.Warning($"material: {i} out of range. fallback");
+            }
+            return GetGltfDefault(GltfMaterialImportUtils.ImportMaterialName(i, null));
         }
 
-        public MaterialDescriptor GetGltfDefault()
-        {
-            return UrpGltfDefaultMaterialImporter.CreateParam();
-        }
+        public MaterialDescriptor GetGltfDefault(string materialName = null) => DefaultMaterialImporter.CreateParam(materialName);
     }
 }

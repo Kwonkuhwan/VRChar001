@@ -41,29 +41,53 @@ namespace UniVRM10
                 Name = name;
             }
 
-            public IEnumerable<(VRM10SpringBoneJoint, Transform)> EnumHeadTail()
+            static Color JointColor(VRM10SpringBoneJoint joint)
             {
-                for (int i = 0; i < Joints.Count; ++i)
+#if UNITY_EDITOR
+                if (joint != null && UnityEditor.Selection.activeGameObject == joint.gameObject)
                 {
-                    var head = Joints[i];
-                    if (head == null)
+                    return Color.green;
+                }
+#endif
+                return Color.yellow;
+            }
+
+            public void DrawGizmos()
+            {
+                if (Joints.Count > 0)
+                {
+                    var backup = Gizmos.matrix;
+                    Gizmos.matrix = Matrix4x4.identity;
+                    VRM10SpringBoneJoint lastJoint = Joints[0];
+                    for (int i = 1; i < Joints.Count; ++i)
                     {
-                        continue;
-                    }
-                    for (int j = i + 1; j < Joints.Count; ++j)
-                    {
-                        var tail = Joints[j];
-                        if (tail != null)
+                        var joint = Joints[i];
+                        Gizmos.color = JointColor(lastJoint);
+                        if (joint != null && lastJoint != null)
                         {
-                            yield return (head, tail.transform);
-                            break;
+                            Gizmos.DrawLine(lastJoint.transform.position, joint.transform.position);
                         }
+                        lastJoint = joint;
                     }
+                    Gizmos.matrix = backup;
                 }
             }
         }
 
         [SerializeField]
         public List<Spring> Springs = new List<Spring>();
+
+        public (Spring spring, int springIndex, int jointIndex)? FindJoint(VRM10SpringBoneJoint joint)
+        {
+            for (int i = 0; i < Springs.Count; ++i)
+            {
+                var j = Springs[i].Joints.IndexOf(joint);
+                if (j >= 0)
+                {
+                    return new(Springs[i], i, j);
+                }
+            }
+            return default;
+        }
     }
 }

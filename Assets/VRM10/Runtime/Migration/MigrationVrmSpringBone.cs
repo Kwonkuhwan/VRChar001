@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using UniGLTF.Extensions.VRMC_springBone;
 using UniJSON;
@@ -18,6 +19,7 @@ namespace UniVRM10
             float _hitRadius;
             float _stiffness;
             int[] _colliderGroups;
+            int? _center;
 
             List<Spring> _springs = new List<Spring>();
             public IReadOnlyList<Spring> Springs => _springs;
@@ -33,12 +35,36 @@ namespace UniVRM10
                 _hitRadius = vrm0BoneGroup["hitRadius"].GetSingle();
                 _stiffness = vrm0BoneGroup["stiffiness"].GetSingle();
                 _colliderGroups = vrm0BoneGroup["colliderGroups"].ArrayItems().Select(z => z.GetInt32()).ToArray();
+
+                var center = vrm0BoneGroup["center"].GetInt32();
+                if (center >= 0)
+                {
+                    _center = center;
+                }
+
                 if (vrm0BoneGroup.ContainsKey("bones"))
                 {
                     foreach (var vrm0Bone in vrm0BoneGroup["bones"].ArrayItems())
                     {
                         MigrateRootBone(vrm0Bone.GetInt32());
                     }
+                }
+
+                // fallback. default spring names
+                foreach (var spring in _springs)
+                {
+                    if (string.IsNullOrEmpty(spring.Name) && spring.Joints.Count > 0 && spring.Joints[0].Node.HasValue)
+                    {
+                        var i = spring.Joints[0].Node.Value;
+                        if (i >= 0 && i < _gltf.nodes.Count)
+                        {
+                            spring.Name = _gltf.nodes[i].name;
+                        }
+                    }
+                }
+                if (string.IsNullOrEmpty(_comment) && _springs.Count > 0)
+                {
+                    _comment = _springs[0].Name;
                 }
             }
 
@@ -49,6 +75,7 @@ namespace UniVRM10
                     Name = _comment,
                     ColliderGroups = _colliderGroups,
                     Joints = new List<SpringBoneJoint>(),
+                    Center = _center,
                 };
                 _springs.Add(spring);
                 return spring;
@@ -254,6 +281,15 @@ namespace UniVRM10
                 {
                     Colliders = colliderIndices.ToArray(),
                 };
+                if (colliderGroup.Colliders.Length > 0 && springBone.Colliders[colliderGroup.Colliders[0]].Node.HasValue)
+                {
+                    var i = springBone.Colliders[colliderGroup.Colliders[0]].Node.Value;
+                    if (i >= 0 && i < gltf.nodes.Count)
+                    {
+                        var node = gltf.nodes[i];
+                        colliderGroup.Name = node.name;
+                    }
+                }
                 springBone.ColliderGroups.Add(colliderGroup);
             }
 

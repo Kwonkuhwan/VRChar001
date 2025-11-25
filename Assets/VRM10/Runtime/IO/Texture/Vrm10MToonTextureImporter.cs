@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using UniGLTF;
 using UniGLTF.Extensions.VRMC_materials_mtoon;
 using UnityEngine;
-using VRMShaders;
-using VRMShaders.VRM10.MToon10.Runtime;
+using VRM10.MToon10;
 
 namespace UniVRM10
 {
@@ -119,7 +118,7 @@ namespace UniVRM10
             }
         }
 
-        private static bool TryGetShadeMultiplyTexture(GltfData data, VRMC_materials_mtoon mToon, out SubAssetKey key, out TextureDescriptor desc)
+        public static bool TryGetShadeMultiplyTexture(GltfData data, VRMC_materials_mtoon mToon, out SubAssetKey key, out TextureDescriptor desc)
         {
             return TryGetSRGBTexture(data, new Vrm10TextureInfo(mToon.ShadeMultiplyTexture), out key, out desc);
         }

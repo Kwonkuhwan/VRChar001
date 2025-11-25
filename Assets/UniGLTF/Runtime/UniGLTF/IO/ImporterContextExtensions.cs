@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using VRMShaders;
 
 namespace UniGLTF
 {
@@ -24,7 +23,7 @@ namespace UniGLTF
 
             if (Symbols.VRM_DEVELOP)
             {
-                Debug.Log($"{self.Data.TargetPath}: {meassureTime.GetSpeedLog()}");
+                UniGLTFLogger.Log($"{self.Data.TargetPath}: {meassureTime.GetSpeedLog()}");
             }
 
             return task.Result;

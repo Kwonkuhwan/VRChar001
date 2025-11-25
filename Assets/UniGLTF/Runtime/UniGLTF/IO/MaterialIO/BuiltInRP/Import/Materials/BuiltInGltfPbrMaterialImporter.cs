@@ -1,51 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
-using VRMShaders;
-using ColorSpace = VRMShaders.ColorSpace;
 
 namespace UniGLTF
 {
     /// <summary>
-    /// Gltf から MaterialImportParam に変換する
+    /// A class that generates MaterialDescriptor for "Standard" shader based on glTF Material specification.
     ///
-    /// StandardShader variables
-    ///
-    /// _Color
-    /// _MainTex
-    /// _Cutoff
-    /// _Glossiness
-    /// _Metallic
-    /// _MetallicGlossMap
-    /// _BumpScale
-    /// _BumpMap
-    /// _Parallax
-    /// _ParallaxMap
-    /// _OcclusionStrength
-    /// _OcclusionMap
-    /// _EmissionColor
-    /// _EmissionMap
-    /// _DetailMask
-    /// _DetailAlbedoMap
-    /// _DetailNormalMapScale
-    /// _DetailNormalMap
-    /// _UVSec
-    /// _EmissionScaleUI
-    /// _EmissionColorUI
-    /// _Mode
-    /// _SrcBlend
-    /// _DstBlend
-    /// _ZWrite
-    ///
+    /// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#materials
     /// </summary>
-    public static class BuiltInGltfPbrMaterialImporter
+    public class BuiltInGltfPbrMaterialImporter
     {
         private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
         private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
         private static readonly int ZWrite = Shader.PropertyToID("_ZWrite");
         private static readonly int Cutoff = Shader.PropertyToID("_Cutoff");
-        public static Shader Shader => Shader.Find("Standard");
 
         private enum BlendMode
         {
@@ -55,7 +24,17 @@ namespace UniGLTF
             Transparent
         }
 
-        public static bool TryCreateParam(GltfData data, int i, out MaterialDescriptor matDesc)
+        /// <summary>
+        /// Can be replaced with custom shaders that are compatible with "Standard" properties and keywords.
+        /// </summary>
+        public Shader Shader { get; set; }
+
+        public BuiltInGltfPbrMaterialImporter(Shader shader = null)
+        {
+            Shader = shader != null ? shader : Shader.Find("Standard");
+        }
+
+        public bool TryCreateParam(GltfData data, int i, out MaterialDescriptor matDesc)
         {
             if (i < 0 || i >= data.GLTF.materials.Count)
             {

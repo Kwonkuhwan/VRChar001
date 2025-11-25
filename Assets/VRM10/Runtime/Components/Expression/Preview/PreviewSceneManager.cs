@@ -2,7 +2,7 @@
 using System.Linq;
 using UnityEngine;
 using System;
-using VRMShaders;
+using UniGLTF;
 
 
 namespace UniVRM10
@@ -27,19 +27,22 @@ namespace UniVRM10
             PreviewSceneManager manager = null;
 
             // if we already instantiated a PreviewInstance previously but just lost the reference, then use that same instance instead of making a new one
+#if UNITY_2022_3_OR_NEWER
+            var managers = GameObject.FindObjectsByType<PreviewSceneManager>(FindObjectsSortMode.InstanceID);
+#else
             var managers = GameObject.FindObjectsOfType<PreviewSceneManager>();
+#endif
             foreach (var x in managers)
             {
                 if (x.Prefab == prefab)
                 {
-                    Debug.LogFormat("find {0}", manager);
+                    UniGLTFLogger.Log($"find {manager}");
                     return manager;
                 }
-                Debug.LogFormat("destroy {0}", x);
+                UniGLTFLogger.Log($"destroy {x}");
                 GameObject.DestroyImmediate(x.gameObject);
             }
 
-            //Debug.Log("new prefab. instanciate");
             // no previous instance detected, so now let's make a fresh one
             // very important: this loads the PreviewInstance prefab and temporarily instantiates it into PreviewInstance
             var go = GameObject.Instantiate(prefab,
@@ -83,7 +86,6 @@ namespace UniVRM10
         {
             hasError = false;
             
-            //Debug.LogFormat("[PreviewSceneManager.Initialize] {0}", prefab);
             Prefab = prefab;
 
             var materialNames = new List<string>();
@@ -112,7 +114,6 @@ namespace UniVRM10
                     
                     m_materialMap.Add(src.name, previewMaterialItem);
 
-                    //Debug.LogFormat("add material {0}", src.name);
                     materialNames.Add(src.name);
                 }
                 return dst;
@@ -136,8 +137,7 @@ namespace UniVRM10
                 .Select(x => x.Path)
                 .ToArray();
 
-            var animator = GetComponent<Animator>();
-            if (animator != null)
+            if(TryGetComponent<Animator>(out var animator))
             {
                 var head = animator.GetBoneTransform(HumanBodyBones.Head);
                 if (head != null)
@@ -263,7 +263,6 @@ namespace UniVRM10
                         PreviewMaterialItem item;
                         if (m_materialMap.TryGetValue(x.MaterialName, out item))
                         {
-                            //Debug.Log("set material");
                             PropItem prop;
                             if (item.PropMap.TryGetValue(x.BindType, out prop))
                             {
@@ -275,7 +274,6 @@ namespace UniVRM10
                                 // }
 
                                 var value = item.Material.GetVector(prop.Name);
-                                //Debug.LogFormat("{0} => {1}", valueName, x.TargetValue);
                                 value += ((x.TargetValue - prop.DefaultValues) * weight);
                                 item.Material.SetColor(prop.Name, value);
                             }

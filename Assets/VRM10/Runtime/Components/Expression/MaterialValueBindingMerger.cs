@@ -2,14 +2,15 @@ using System;
 using System.Collections.Generic;
 using UniGLTF.Extensions.VRMC_vrm;
 using UnityEngine;
-using VRMShaders.VRM10.MToon10.Runtime;
+using VRM10.MToon10;
+using Object = UnityEngine.Object;
 
 namespace UniVRM10
 {
     ///
     /// Base + (A.Target - Base) * A.Weight + (B.Target - Base) * B.Weight ...
     ///
-    internal sealed class MaterialValueBindingMerger
+    internal sealed class MaterialValueBindingMerger : IDisposable
     {
         private static readonly string COLOR_PROPERTY = MToon10Prop.BaseColorFactor.ToUnityShaderLabName();
         private static readonly string EMISSION_COLOR_PROPERTY = MToon10Prop.EmissiveFactor.ToUnityShaderLabName();
@@ -18,14 +19,12 @@ namespace UniVRM10
         private static readonly string SHADE_COLOR_PROPERTY = MToon10Prop.ShadeColorFactor.ToUnityShaderLabName();
         private static readonly string MATCAP_COLOR_PROPERTY = MToon10Prop.MatcapColorFactor.ToUnityShaderLabName();
 
+        private readonly HashSet<Material> _clonedMaterials = new();
+
         public static string GetProperty(MaterialColorType bindType)
         {
             switch (bindType)
             {
-                // case MaterialBindType.UvOffset:
-                // case MaterialBindType.UvScale:
-                //     return UV_PROPERTY;
-
                 case MaterialColorType.color:
                     return COLOR_PROPERTY;
 
@@ -54,16 +53,44 @@ namespace UniVRM10
         /// </summary>
         Dictionary<string, PreviewMaterialItem> m_materialMap = new Dictionary<string, PreviewMaterialItem>();
 
-        void InitializeMaterialMap(Dictionary<ExpressionKey, VRM10Expression> clipMap, Transform root)
+        void InitializeMaterialMap(Dictionary<ExpressionKey, VRM10Expression> clipMap, Transform root, bool isPrefabInstance)
         {
-            Dictionary<string, Material> materialNameMap = new Dictionary<string, Material>();
+            var materialNameMap = new Dictionary<string, Material>();
             foreach (var renderer in root.GetComponentsInChildren<Renderer>())
             {
-                foreach (var material in renderer.sharedMaterials)
+                // VFXRendererなど、Materialが設定できないRendererが存在する
+                if (renderer is not SkinnedMeshRenderer && renderer is not MeshRenderer) continue;
+
+                if (isPrefabInstance)
                 {
-                    if (material != null && !materialNameMap.ContainsKey(material.name))
+                    // EditorImportされたPrefabのInstanceとして生成されている場合、Materialを複製する
+                    var sharedMaterials = renderer.sharedMaterials;
+                    var materials = renderer.materials;
+                    for (var i = 0; i < materials.Length; i++)
                     {
-                        materialNameMap.Add(material.name, material);
+                        var sharedMaterial = sharedMaterials[i];
+                        var material = materials[i];
+                    
+                        if (!sharedMaterial || !material) continue;
+
+                        // 複製されたマテリアルはこのクラス内で破棄
+                        if (sharedMaterial != material) _clonedMaterials.Add(material);
+
+                        // 複製前の名前に揃え、それを記録しておく
+                        // なお、Vrm10Runtimeのインスタンスが作られるより先にユーザーによってMaterialが複製されるパターンは想定しない
+                        material.name = sharedMaterial.name;
+                        materialNameMap.TryAdd(sharedMaterial.name, material);
+                    }
+                }
+                else
+                {
+                    // PrefabのInstanceでない（RuntimeImportされている）ならMaterialは複製しない
+                    foreach (var material in renderer.sharedMaterials)
+                    {
+                        if (material)
+                        {
+                            materialNameMap.TryAdd(material.name, material);
+                        }
                     }
                 }
             }
@@ -109,17 +136,6 @@ namespace UniVRM10
                         m_materialMap.Add(binding.MaterialName, item);
                     }
                 }
-            }
-        }
-
-        /// <summary>
-        /// m_materialMap に記録した値に Material を復旧する
-        /// </summary>
-        public void RestoreMaterialInitialValues()
-        {
-            foreach (var kv in m_materialMap)
-            {
-                kv.Value.RestoreInitialValues();
             }
         }
         #endregion
@@ -231,29 +247,6 @@ namespace UniVRM10
             }
         }
 
-        // UVアクセスするテクスチャーのScaleOffsetプロパティの一覧
-        static Dictionary<string, string[]> UVPropMap = new Dictionary<string, string[]>
-        {
-            {"Standard", new string[]{
-                "_MainTex_ST",
-            }},
-            {"VRM10/MToon10", new string[]{
-                "_MainTex_ST",
-            }},
-        };
-        static string[] DefaultProps = { "_MainTex_ST" };
-        public static String[] GetUVProps(string shaderName)
-        {
-            if (UVPropMap.TryGetValue(shaderName, out string[] props))
-            {
-                return props;
-            }
-            else
-            {
-                return DefaultProps;
-            }
-        }
-
         HashSet<MaterialTarget> m_used = new HashSet<MaterialTarget>();
         public void Apply()
         {
@@ -302,10 +295,8 @@ namespace UniVRM10
                         //
                         // Standard and MToon use _MainTex_ST as uv0 scale/offset
                         //
-                        foreach (var prop in GetUVProps(item.Material.shader.name))
-                        {
-                            item.Material.SetVector(prop, kv.Value);
-                        }
+                        item.Material.mainTextureScale = new Vector2(kv.Value.x, kv.Value.y);
+                        item.Material.mainTextureOffset = new Vector2(kv.Value.z, kv.Value.w);
                     }
                 }
                 m_materialUVMap.Clear();
@@ -313,9 +304,18 @@ namespace UniVRM10
         }
         #endregion
 
-        public MaterialValueBindingMerger(Dictionary<ExpressionKey, VRM10Expression> clipMap, Transform root)
+        public MaterialValueBindingMerger(Dictionary<ExpressionKey, VRM10Expression> clipMap, Transform root, bool isPrefabInstance)
         {
-            InitializeMaterialMap(clipMap, root);
+            InitializeMaterialMap(clipMap, root, isPrefabInstance);
+        }
+
+        public void Dispose()
+        {
+            foreach (var clonedMaterial in _clonedMaterials)
+            {
+                Object.Destroy(clonedMaterial);
+            }
+            _clonedMaterials.Clear();
         }
     }
 }

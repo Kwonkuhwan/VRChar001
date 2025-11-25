@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using UniGLTF.Utils;
 using UnityEngine;
-using VRMShaders;
 
 namespace UniGLTF
 {
@@ -9,6 +9,10 @@ namespace UniGLTF
     /// ImporterContext の Load 結果の GltfModel
     ///
     /// Runtime でモデルを Destory したときに関連リソース(Texture, Material...などの UnityEngine.Object)を自動的に Destroy する。
+    /// 
+    /// TODO: Editor Importの場合でも一瞬だけこのクラスのインスタンスが生じるが、すぐDestroyImmediateされるため、それらを区別する用途に使うことができる
+    /// Editorでも利用されている以上、名前・責務が良くないので見直したい。
+    /// 
     /// </summary>
     public class RuntimeGltfInstance : MonoBehaviour, IResponsibilityForDestroyObjects
     {
@@ -166,9 +170,68 @@ namespace UniGLTF
             }
         }
 
+        public void ReplaceResource(UnityEngine.Object oldResource, UnityEngine.Object newResource)
+        {
+            if (oldResource == null || newResource == null || oldResource.GetType() != newResource.GetType())
+            {
+                UniGLTFLogger.Error($"{nameof(RuntimeGltfInstance)} - Could not replace resource: mismatched or null types.");
+                return;
+            }
+            
+            for (int i = 0; i < _resources.Count; i++)
+            {
+                if (_resources[i].Item2 == oldResource)
+                {
+                    _resources[i] = (_resources[i].Item1, newResource);
+                    break;
+                }
+            }
+
+            switch (oldResource)
+            {
+                case Texture oldTexture when newResource is Texture newTexture:
+                    int texIndex = _textures.IndexOf(oldTexture);
+                    if (texIndex != -1)
+                    {
+                        _textures[texIndex] = newTexture;
+                    }
+                    break;
+
+                case Material oldMaterial when newResource is Material newMaterial:
+                    int matIndex = _materials.IndexOf(oldMaterial);
+                    if (matIndex != -1)
+                    {
+                        _materials[matIndex] = newMaterial;
+                    }
+                    break;
+
+                case AnimationClip oldClip when newResource is AnimationClip newClip:
+                    int clipIndex = _animationClips.IndexOf(oldClip);
+                    if (clipIndex != -1)
+                    {
+                        _animationClips[clipIndex] = newClip;
+                    }
+                    break;
+
+                case Mesh oldMesh when newResource is Mesh newMesh:
+                    int meshIndex = _meshes.IndexOf(oldMesh);
+                    if (meshIndex != -1)
+                    {
+                        _meshes[meshIndex] = newMesh;
+                    }
+                    break;
+            }
+
+            Destroy(oldResource);
+        }
+
+        public void AddResource<T>(T resource) where T : UnityEngine.Object
+        {
+            _resources.Add((SubAssetKey.Create(resource), resource));
+        }
+
         void OnDestroy()
         {
-            Debug.Log("UnityResourceDestroyer.OnDestroy");
             foreach (var (_, obj) in _resources)
             {
                 UnityObjectDestroyer.DestroyRuntimeOrEditor(obj);
@@ -190,6 +253,34 @@ namespace UniGLTF
             {
                 UnityObjectDestroyer.DestroyRuntimeOrEditor(this.gameObject);
             }
+        }
+
+        static Dictionary<Transform, IReadOnlyDictionary<Transform, TransformState>> PoseMap = new();
+        public static IReadOnlyDictionary<Transform, TransformState> SafeGetInitialPose(
+            Transform root, bool useCache = true)
+        {
+            if (useCache && PoseMap.TryGetValue(root, out var pose))
+            {
+                return pose;
+            }
+
+            if (root.TryGetComponent<RuntimeGltfInstance>(out var runtime))
+            {
+                // RuntimeGltfInstance があるとき => RuntimeLoad => 初期姿勢は glTF の node に由来する                
+                // copy
+                pose = runtime.InitialTransformStates.ToDictionary((kv) => kv.Key, (kv) => kv.Value);
+            }
+            else
+            {
+                // RuntimeGltfInstance が無いとき => Scene 配置の prefab など。シーンの現状を代用する。
+                // T-Pose であることを期待しているが既に T-Pose でないかもしれない。
+                pose = root.GetComponentsInChildren<Transform>().ToDictionary(x => x, x => new TransformState(x));
+            }
+
+            // add cache
+            PoseMap.Add(root, pose);
+
+            return pose;
         }
     }
 }
