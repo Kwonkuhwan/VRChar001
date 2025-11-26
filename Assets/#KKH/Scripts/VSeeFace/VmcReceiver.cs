@@ -170,7 +170,6 @@ public class VmcReceiver : MonoBehaviour
             if (!_loggedNames.Contains(name))
             {
                 _loggedNames.Add(name);
-                Debug.Log($"[VMC BlendKey] {name}");
             }
             // Debug.Log($"[VMC Blend] {name} = {value}");
 #endif
@@ -188,10 +187,14 @@ public class VmcReceiver : MonoBehaviour
 
             _rootPose.position = new Vector3(px, py, pz);
             _rootPose.rotation = new Quaternion(qx, qy, qz, qw);
+
+            //Debug.Log($"[VMC Root Pos] |  {data} : {_rootPose.position}");
+            //Debug.Log($"[VMC Root Rot] |  {data} : {_rootPose.rotation}");
         }
         else if (address == "/VMC/Ext/Bone/Pos")
         {
             string boneName = ReadOscString(data, ref offset);
+
             float px = ReadOscFloat(data, ref offset);
             float py = ReadOscFloat(data, ref offset);
             float pz = ReadOscFloat(data, ref offset);
@@ -206,6 +209,10 @@ public class VmcReceiver : MonoBehaviour
                 rotation = new Quaternion(qx, qy, qz, qw)
             };
             _bonePoses[boneName] = pose;
+
+            //Debug.Log($"[VMC Bone Pos] | {boneName}");
+            //Debug.Log($"[VMC Bone Rot]| {boneName}");
+            Debug.Log($"public string {boneName} = \"{boneName}\";");
         }
         else
         {
