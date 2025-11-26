@@ -32,6 +32,18 @@ public class VmcReceiver : MonoBehaviour
     public float fun;
     public float sorrow;
 
+    
+    public struct PoseData
+    {
+        public Vector3 position;
+        public Quaternion rotation;
+    }
+
+    [Header("루트 포즈 (Inspector에서 확인용)")]
+    public PoseData _rootPose;
+    private readonly ConcurrentDictionary<string, PoseData> _bonePoses =
+        new ConcurrentDictionary<string, PoseData>();
+
     void Start()
     {
         try
@@ -51,6 +63,21 @@ public class VmcReceiver : MonoBehaviour
             Debug.LogError("[VMC] Udp start error: " + e);
         }
     }
+
+    void Update()
+    {
+        // 일단 이렇게 Inspector에서 보면서 어떤 값이 오는지 확인
+        blinkL = GetBlend("blink_l");     // 또는 나중에 EyeBlinkLeft 등으로 교체
+        blinkR = GetBlend("blink_r");
+        mouthA = GetBlend("A");           // 입 "아"
+        joy = GetBlend("Joy");         // 웃음
+        angry = GetBlend("Angry");
+        fun = GetBlend("Fun");
+        sorrow = GetBlend("Sorrow");
+
+        // 실제 이름은 콘솔에 찍힌 [VMC BlendKey] 보고 맞춰쓰면 됨
+    }
+
 
     void OnDestroy()
     {
@@ -148,6 +175,38 @@ public class VmcReceiver : MonoBehaviour
             // Debug.Log($"[VMC Blend] {name} = {value}");
 #endif
         }
+        else if (address == "/VMC/Ext/Root/Pos")
+        {
+            string rootName = ReadOscString(data, ref offset);
+            float px = ReadOscFloat(data, ref offset);
+            float py = ReadOscFloat(data, ref offset);
+            float pz = ReadOscFloat(data, ref offset);
+            float qx = ReadOscFloat(data, ref offset);
+            float qy = ReadOscFloat(data, ref offset);
+            float qz = ReadOscFloat(data, ref offset);
+            float qw = ReadOscFloat(data, ref offset);
+
+            _rootPose.position = new Vector3(px, py, pz);
+            _rootPose.rotation = new Quaternion(qx, qy, qz, qw);
+        }
+        else if (address == "/VMC/Ext/Bone/Pos")
+        {
+            string boneName = ReadOscString(data, ref offset);
+            float px = ReadOscFloat(data, ref offset);
+            float py = ReadOscFloat(data, ref offset);
+            float pz = ReadOscFloat(data, ref offset);
+            float qx = ReadOscFloat(data, ref offset);
+            float qy = ReadOscFloat(data, ref offset);
+            float qz = ReadOscFloat(data, ref offset);
+            float qw = ReadOscFloat(data, ref offset);
+
+            var pose = new PoseData
+            {
+                position = new Vector3(px, py, pz),
+                rotation = new Quaternion(qx, qy, qz, qw)
+            };
+            _bonePoses[boneName] = pose;
+        }
         else
         {
             // 우리가 안 쓰는 메시지면 인자 스킵
@@ -230,6 +289,18 @@ public class VmcReceiver : MonoBehaviour
         }
     }
 
+    // ==== 포즈 관련 ====
+    public bool TryGetRootPose(out PoseData pose)
+    {
+        pose = _rootPose;
+        return true; // 루트는 항상 있다고 가정
+    }
+
+    public bool TryGetBonePose(string name, out PoseData pose)
+    {
+        return _bonePoses.TryGetValue(name, out pose);
+    }
+
     // ==== Unity에서 쓰기 쉽게 꺼내기 ====
 
     public float GetBlend(string name)
@@ -237,19 +308,5 @@ public class VmcReceiver : MonoBehaviour
         if (_blendDict.TryGetValue(name, out var v))
             return v;
         return 0f;
-    }
-
-    void Update()
-    {
-        // 일단 이렇게 Inspector에서 보면서 어떤 값이 오는지 확인
-        blinkL = GetBlend("blink_l");     // 또는 나중에 EyeBlinkLeft 등으로 교체
-        blinkR = GetBlend("blink_r");
-        mouthA = GetBlend("A");           // 입 "아"
-        joy = GetBlend("Joy");         // 웃음
-        angry = GetBlend("Angry");
-        fun = GetBlend("Fun");
-        sorrow = GetBlend("Sorrow");
-
-        // 실제 이름은 콘솔에 찍힌 [VMC BlendKey] 보고 맞춰쓰면 됨
     }
 }
