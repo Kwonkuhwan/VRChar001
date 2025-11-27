@@ -11,6 +11,8 @@ public class BoneBinding
 
     [Tooltip("VRM 캐릭터의 대응 Transform")]
     public Transform target;
+    public Quaternion rot;
+    public Vector3 rotvec;
 
     public bool applyPosition = false;  // 보통 루트/발만 ON
     public bool applyRotation = true;   // 대부분 회전만 따라가게
@@ -27,45 +29,6 @@ public class Vrm10VmcMotionDriver : MonoBehaviour
 
     [Header("본 매핑 리스트")]
     public List<BoneBinding> boneBindings = new List<BoneBinding>();
-    //public string rootBoneName = "Root"; // VMC에서 오는 이름
-    //public string hipsBoneName = "Hips";
-    //public string LeftUpeerLegName = "LeftUperrLeg";
-    //public string RightUpperLegName = "RightUpperLeg";
-    //public string LeftLowerLegName = "LeftLowerLeg";
-    //public string RightLowerLegName = "RightLowerLeg";
-    //public string LeftFootName = "LeftFoot";
-    //public string RightFootName = "RightFoot";
-    //public string SpineName = "Spine";
-    //public string ChestName = "Chest";
-    //public string NeckName = "Neck";
-    //public string headBoneName = "Head";
-    //public string LeftShoulder = "LeftShoulder";
-    //public string RightShoulder = "RightShoulder";
-    //public string LeftUpperArm = "LeftUpperArm";
-    //public string RightUpperArm = "RightUpperArm";
-    //public string LeftLowerArm = "LeftLowerArm";
-    //public string RightLowerArm = "RightLowerArm";
-    //public string LeftHand = "LeftHand";
-    //public string RightHand = "RightHand";
-    //public string LeftToes = "LeftToes";
-    //public string RightToes = "RightToes";
-    //public string LeftEye = "LeftEye";
-    //public string RightEye = "RightEye";
-    //public string LeftThumbProximal = "LeftThumbProximal";
-    //public string LeftThumbIntermediate = "LeftThumbIntermediate";
-    //public string LeftThumbDistal = "LeftThumbDistal";
-    //public string LeftIndexProximal = "LeftIndexProximal";
-    //public string LeftIndexIntermediate = "LeftIndexIntermediate";
-    //public string LeftIndexDistal = "LeftIndexDistal";
-    //public string LeftMiddleProximal = "LeftMiddleProximal";
-    //public string LeftMiddleIntermediate = "LeftMiddleIntermediate";
-    //public string LeftMiddleDistal = "LeftMiddleDistal";
-    //public string LeftRingProximal = "LeftRingProximal";
-    //public string LeftRingIntermediate = "LeftRingIntermediate";
-    //public string LeftRingDistal = "LeftRingDistal";
-    //public string LeftLittleProximal = "LeftLittleProximal";
-    //public string LeftLittleIntermediate = "LeftLittleIntermediate";
-    //public string LeftLittleDistal = "LeftLittleDistal";
 
     Vrm10Instance _vrm;
 
@@ -86,6 +49,7 @@ public class Vrm10VmcMotionDriver : MonoBehaviour
         var animator = GetComponent<Animator>();
         if (animator == null) return;
 
+        #region boneBindings
         boneBindings = new List<BoneBinding>
     {
 new BoneBinding {
@@ -97,6 +61,11 @@ new BoneBinding {
 new BoneBinding {
             vmcName = "LeftUpperLeg",
             target = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg),
+            applyRotation = true
+        },
+new BoneBinding {
+            vmcName = "RightUpperLeg",
+            target = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg),
             applyRotation = true
         },
 new BoneBinding {
@@ -190,8 +159,6 @@ new BoneBinding {
             target = animator.GetBoneTransform(HumanBodyBones.RightToes),
             applyRotation = true
         },
-
-
 new BoneBinding {
             vmcName = "LeftEye",
             target = animator.GetBoneTransform(HumanBodyBones.LeftEye),
@@ -359,6 +326,7 @@ new BoneBinding {
         },
         // 팔/다리도 같은 방식으로 추가…
     };
+        #endregion
     }
 
     void LateUpdate()
@@ -391,7 +359,9 @@ new BoneBinding {
                 b.target.position = pose.position;
 
             if (b.applyRotation)
-                b.target.rotation = pose.rotation;
+            {
+                b.target.localRotation = pose.rotation;
+            }
         }
     }
 }

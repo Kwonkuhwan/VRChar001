@@ -26,13 +26,23 @@ public class VmcReceiver : MonoBehaviour
     public float blinkL;
     public float blinkR;
     public float mouthA;
-    public float joy;
+    public float mouthI;
+    public float mouthU;
+    public float mouthE;
+    [Space(10)]
+    public float neutra;
+    public float happy;
     public float angry;
-    public float neutral;
     public float fun;
     public float sorrow;
+    public float surprised;
+    [Space(10)]
+    public float lookUp;
+    public float lookDown;
+    public float lookLeft;
+    public float lookRight;
 
-    
+
     public struct PoseData
     {
         public Vector3 position;
@@ -67,15 +77,27 @@ public class VmcReceiver : MonoBehaviour
     void Update()
     {
         // 일단 이렇게 Inspector에서 보면서 어떤 값이 오는지 확인
-        blinkL = GetBlend("blink_l");     // 또는 나중에 EyeBlinkLeft 등으로 교체
-        blinkR = GetBlend("blink_r");
-        mouthA = GetBlend("A");           // 입 "아"
-        joy = GetBlend("Joy");         // 웃음
-        angry = GetBlend("Angry");
-        fun = GetBlend("Fun");
-        sorrow = GetBlend("Sorrow");
+#if UNITY_EDITOR
+        blinkL = GetBlend("Blink_L");     // 또는 나중에 EyeBlinkLeft 등으로 교체
+        blinkR = GetBlend("Blink_R");
 
-        // 실제 이름은 콘솔에 찍힌 [VMC BlendKey] 보고 맞춰쓰면 됨
+        mouthA = GetBlend("A");           // 입 "아"
+        mouthI = GetBlend("I");           // 입 "이"
+        mouthU = GetBlend("U");           // 입 "우"
+        mouthE = GetBlend("E");           // 입 "에"
+
+        neutra = GetBlend("Neutral");     // 기본
+        happy = GetBlend("Joy");         // 웃음
+        angry = GetBlend("Angry");       // 화남
+        fun = GetBlend("Fun");           // 즐거움
+        sorrow = GetBlend("Sorrow");     // 슬픔
+        surprised = GetBlend("Surprised"); // 놀람
+
+        lookUp = GetBlend("Look_Up");         // 시선 위
+        lookDown = GetBlend("Look_Down");     // 시선 아래
+        lookLeft = GetBlend("Look_Left");     // 시선 왼쪽
+        lookRight = GetBlend("Look_Right");   // 시선 오른쪽
+#endif
     }
 
 
@@ -158,21 +180,22 @@ public class VmcReceiver : MonoBehaviour
 
         if (address == "/VMC/Ext/Blend/Val")
         {
-            // 첫 arg: 이름(string)
+            // arg: 이름(string)
             string name = ReadOscString(data, ref offset);
-            // 둘째 arg: 값(float)
+            // arg: 값(float)
             float value = ReadOscFloat(data, ref offset);
 
             _blendDict[name] = value;
+            //Debug.Log($"{name}");
 
-#if UNITY_EDITOR
-            // 처음 보는 키는 한 번 찍어보자 (어떤 이름이 오는지 확인용)
-            if (!_loggedNames.Contains(name))
-            {
-                _loggedNames.Add(name);
-            }
-            // Debug.Log($"[VMC Blend] {name} = {value}");
-#endif
+//#if UNITY_EDITOR
+//            // 처음 보는 키는 한 번 찍어보자 (어떤 이름이 오는지 확인용)
+//            if (!_loggedNames.Contains(name))
+//            {
+//                _loggedNames.Add(name);
+//            }
+//            // Debug.Log($"[VMC Blend] {name} = {value}");
+//#endif
         }
         else if (address == "/VMC/Ext/Root/Pos")
         {
@@ -212,7 +235,13 @@ public class VmcReceiver : MonoBehaviour
 
             //Debug.Log($"[VMC Bone Pos] | {boneName}");
             //Debug.Log($"[VMC Bone Rot]| {boneName}");
-            Debug.Log($"public string {boneName} = \"{boneName}\";");
+            //Debug.Log($"public string {boneName} = \"{boneName}\";");
+            //if(boneName == "LeftEye" || boneName == "RightEye")
+            //{
+            //    Debug.Log($"[VMC Eye Pos] | {boneName} : {pose.position}");
+            //    Debug.Log($"[VMC Eye Rot]| {boneName} : {pose.rotation}");
+            //}
+            //Debug.Log($"{boneName}");
         }
         else
         {
